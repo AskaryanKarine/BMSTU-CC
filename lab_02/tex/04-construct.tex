@@ -1,0 +1,410 @@
+\section{Практическая часть}
+
+\subsection{Результат выполнения работы}
+
+В таблицфах~\ref{tbl:result}~---~\ref{tbl:result1} приведены результаты работы программы.
+
+\begin{table}[H]
+    \centering
+	\caption{Тесты устранения левой рекурсии}
+    \label{tbl:result}
+\begin{tabular}{|l|l|}
+\hline
+Входная грамматика                                                                                                                                                                                          & Результат                                                                                                                                                                                                                                                                   \\ \hline
+\begin{tabular}[c]{@{}l@{}}3\\ E T F\\ 5\\ + * ( ) a\\ 6\\ E -\textgreater E + T\\ E -\textgreater T\\ T -\textgreater T * F\\ T -\textgreater F\\ F -\textgreater a\\ F -\textgreater (E)\\ E\end{tabular} & \begin{tabular}[c]{@{}l@{}}5\\ E T F E' T'\\ 5\\ + * ( ) a\\ 8\\ E -\textgreater T E'\\ E' -\textgreater + T E'\\ E' -\textgreater eps\\ T' -\textgreater * F T'\\ T' -\textgreater eps\\ T -\textgreater F T'\\ F -\textgreater a\\ F -\textgreater ( E )\\ E\end{tabular} \\ \hline
+\begin{tabular}[c]{@{}l@{}}2\\ S A\\ 4\\ a b c d\\ 5\\ S -\textgreater A a\\ S -\textgreater b\\ A -\textgreater A c\\ A -\textgreater S d\\ A -\textgreater eps\\ S\end{tabular}                           & \begin{tabular}[c]{@{}l@{}}3\\ S A A'\\ 4\\ a b c d\\ 7\\ S -\textgreater A a\\ S -\textgreater b\\ A -\textgreater b d A'\\ A -\textgreater eps A'\\ A' -\textgreater c A'\\ A' -\textgreater a d A'\\ A' -\textgreater eps\\ S\end{tabular}                               \\ \hline
+\end{tabular}
+\end{table}
+
+
+\begin{table}[H]
+    \centering
+	\caption{Тесты устранения бесполезных символов}
+    \label{tbl:result1}
+\begin{tabular}{|l|l|}
+\hline
+Входная грамматика                                                                                                                                                                                                                                                & Результат                                                                                                                                                                                                                                                         \\ \hline
+\begin{tabular}[c]{@{}l@{}}8\\ S A B C D E F G\\ 1\\ c\\ 5\\ S -\textgreater A B\\ S -\textgreater C D\\ A -\textgreater E F\\ G -\textgreater A D\\ C -\textgreater c\\ S\end{tabular}                                                                           & \begin{tabular}[c]{@{}l@{}}7\\ A B C D E F S\\ 1\\ c\\ 4\\ S -\textgreater A B\\ S -\textgreater C D\\ A -\textgreater E F\\ C -\textgreater c\\ S\end{tabular}                                                                                                   \\ \hline
+\begin{tabular}[c]{@{}l@{}}3\\ S A B\\ 2\\ a b\\ 9\\ S -\textgreater A\\ S -\textgreater B\\ A -\textgreater a B\\ A -\textgreater b S\\ A -\textgreater b\\ B -\textgreater A B\\ B -\textgreater B a\\ B -\textgreater A S\\ B -\textgreater b\\ S\end{tabular} & \begin{tabular}[c]{@{}l@{}}3\\ A B S\\ 2\\ a b\\ 9\\ S -\textgreater A\\ S -\textgreater B\\ B -\textgreater A B\\ B -\textgreater B a\\ B -\textgreater A S\\ B -\textgreater b\\ A -\textgreater a B\\ A -\textgreater b S\\ A -\textgreater b\\ S\end{tabular} \\ \hline
+\end{tabular}
+
+\end{table}
+
+\subsection{Код программы}
+
+В листингах~\ref{lst1}~---~\ref{lst2} приведен код программы на языке Go.
+
+\begin{lstlisting}[language=Go, caption={Код модуля \textit{grammar}}, label=lst1]
+const (
+	Empty = "eps"
+)
+
+type Grammar struct {
+	NonTerminals []string
+	Terminals    []string
+	Start        string
+	Rules        map[string][][]string
+}
+\end{lstlisting}
+
+\begin{lstlisting}[language=Go, caption={Код модуля \textit{grammar} --- устранение левой рекурсии}]
+package grammar
+
+import "slices"
+
+func (g *Grammar) EliminateLeftRecursion() *Grammar {
+	orderedNT := make([]string, len(g.NonTerminals))
+	copy(orderedNT, g.NonTerminals)
+
+	for i := 0; i < len(orderedNT); i++ {
+		currentNT := orderedNT[i]
+
+		for j := 0; j < i; j++ {
+			prevNT := orderedNT[j]
+			g.replaceProductions(currentNT, prevNT)
+		}
+
+		g.eliminateImmediateLR(currentNT)
+	}
+
+	return g
+}
+
+func (g *Grammar) replaceProductions(ai, aj string) {
+	productions, exists := g.Rules[ai]
+	if !exists {
+		return
+	}
+
+	var newProductions [][]string
+	for _, prod := range productions {
+		if len(prod) > 0 && prod[0] == aj {
+			gamma := prod[1:]
+			ajProductions := g.Rules[aj]
+
+			for _, sigma := range ajProductions {
+				newProd := append(append([]string{}, sigma...), gamma...)
+				newProductions = append(newProductions, newProd)
+			}
+		} else {
+			newProductions = append(newProductions, prod)
+		}
+	}
+	g.Rules[ai] = newProductions
+}
+
+func (g *Grammar) eliminateImmediateLR(nt string) {
+	productions := g.Rules[nt]
+	var alphas [][]string
+	var betas [][]string  
+
+	for _, prod := range productions {
+		if len(prod) > 0 && prod[0] == nt {
+			alphas = append(alphas, prod[1:])
+		} else {
+			betas = append(betas, prod)
+		}
+	}
+
+	if len(alphas) == 0 {
+		return
+	}
+
+	newNT := nt + "'"
+	g.NonTerminals = append(g.NonTerminals, newNT)
+
+	var newBetas [][]string
+	for _, beta := range betas {
+		newBetas = append(newBetas, append(beta, newNT))
+	}
+	g.Rules[nt] = newBetas
+
+	var newAlphaProductions [][]string
+	for _, alpha := range alphas {
+		newAlphaProductions = append(newAlphaProductions, append(alpha, newNT))
+	}
+	newAlphaProductions = append(newAlphaProductions, []string{Empty})
+
+	g.Rules[newNT] = newAlphaProductions
+}
+
+func (g *Grammar) RemoveCycles() *Grammar {
+	orderedNT := g.NonTerminals
+
+	for i, Ai := range orderedNT {
+		for j := 0; j < i; j++ {
+			Aj := orderedNT[j]
+
+			var newCombs [][]string
+			for _, comb := range g.Rules[Ai] {
+				if len(comb) > 0 && comb[0] == Aj {
+					for _, jComb := range g.Rules[Aj] {
+						newComb := append(slices.Clone(jComb), comb[1:]...)
+						newCombs = append(newCombs, newComb)
+					}
+				} else {
+					newCombs = append(newCombs, comb)
+				}
+			}
+			g.Rules[Ai] = newCombs
+		}
+	}
+
+	return g
+}
+\end{lstlisting}
+
+\begin{lstlisting}[language=Go, caption={Код модуля \textit{grammar} --- устранение бесполезных символов}]
+package grammar
+
+import (
+	"reflect"
+	"sort"
+)
+
+func (g *Grammar) EliminationUselessSymbols() *Grammar {
+	useful := make(map[string]bool)
+	newUseful := make(map[string]bool)
+	terms := make(map[string]bool)
+
+	newUseful[g.Start] = true
+	for _, t := range g.Terminals {
+		terms[t] = true
+	}
+
+	for !reflect.DeepEqual(useful, newUseful) {
+		useful, newUseful = newUseful, useful
+		for k := range newUseful {
+			delete(newUseful, k)
+		}
+
+		
+		for symbol, productions := range g.Rules {
+			if useful[symbol] {
+				for _, p := range productions {
+					for _, elem := range p {
+						if terms[elem] {
+							newUseful[elem] = true
+						}
+					}
+				}
+			}
+		}
+
+		for k := range useful {
+			newUseful[k] = true
+		}
+	}
+
+	for symbol, productions := range g.Rules {
+		if !useful[symbol] {
+			continue
+		}
+		for _, p := range productions {
+			for _, elem := range p {
+				if terms[elem] {
+					continue
+				}
+				useful[elem] = true
+
+			}
+		}
+
+	}
+
+	newRules := make(map[string][][]string)
+	for symbol, productions := range g.Rules {
+		if useful[symbol] { 
+			newRules[symbol] = productions
+		}
+	}
+
+	newNonTerminals, newTerminals := g.extractSymbolsFromRules(newRules)
+
+	return &Grammar{
+		NonTerminals: newNonTerminals,
+		Terminals:    newTerminals,
+		Start:        g.Start,
+		Rules:        newRules,
+	}
+}
+
+func (g *Grammar) extractSymbolsFromRules(newRules map[string][][]string) (nonTerminals, terminals []string) {
+	existsT := map[string]struct{}{}
+	existsNT := map[string]struct{}{}
+
+	for _, nt := range g.NonTerminals {
+		existsNT[nt] = struct{}{}
+	}
+
+	for _, t := range g.Terminals {
+		existsT[t] = struct{}{}
+	}
+
+	newNT := make(map[string]struct{})
+	newT := make(map[string]struct{})
+
+	for nt := range newRules {
+		newNT[nt] = struct{}{}
+	}
+
+	for _, productions := range newRules {
+		for _, production := range productions {
+			for _, symbol := range production {
+				if symbol == Empty {
+					continue
+				}
+
+				if _, ok := existsNT[symbol]; ok {
+					newNT[symbol] = struct{}{}
+					continue
+				}
+
+				if _, ok := existsT[symbol]; ok {
+					newT[symbol] = struct{}{}
+					continue
+				}
+			}
+		}
+	}
+
+	nonTerminals = mapKeysToSlice(newNT)
+	terminals = mapKeysToSlice(newT)
+
+	return nonTerminals, terminals
+}
+
+func mapKeysToSlice(m map[string]struct{}) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
+}
+\end{lstlisting}
+
+\begin{lstlisting}[language=Go, caption={Код модуля \textit{commands}}]
+package commands
+
+import (
+	"bytes"
+	"fmt"
+	"github.com/AskaryanKarine/BMSTU-CC/lab_02/internal/fs"
+	"github.com/AskaryanKarine/BMSTU-CC/lab_02/internal/grammar"
+)
+
+const (
+	leftRecSuf      = "_lr"
+	leftIndirectSuf = "_ilr"
+	UnlessSymSuf    = "_us"
+)
+
+type Command struct {
+	grammarFileName string
+	grammar         *grammar.Grammar
+	outputBuffer    bytes.Buffer
+}
+
+func (c *Command) output() string {
+	return c.outputBuffer.String()
+}
+
+func (c *Command) LoadGrammar(input string) (string, error) {
+	c.outputBuffer.Reset()
+	gram, err := grammar.ReadGrammarFromFile(input)
+	if err != nil {
+		msg := fmt.Sprintf("ошибка при чтении файла %s: %v\n", input, err)
+		c.outputBuffer.WriteString(msg)
+		return c.output(), err
+	}
+	msg := fmt.Sprintf("Грамматика %s прочитана успешно", input)
+	c.outputBuffer.WriteString(msg)
+	c.grammar = gram
+	c.grammarFileName = input
+	return c.output(), nil
+}
+
+func (c *Command) EliminatingLeftRecursion() (string, error) {
+	c.outputBuffer.Reset()
+	c.outputBuffer.WriteString("Вызов устранения левой рекурсии\n")
+	out := c.grammar.Copy().EliminateLeftRecursion().String()
+
+	filename := fs.AddSuffixToFilename(c.grammarFileName, leftRecSuf)
+	err := fs.WriteStringToFile(out, filename)
+	if err != nil {
+		msg := fmt.Sprintf("Ошибка при записи файла %s: %v\n", filename, err)
+		c.outputBuffer.WriteString(msg)
+
+		return c.output(), err
+	}
+
+	msg := fmt.Sprintf("Грамматика записана в файл %s\n", filename)
+	c.outputBuffer.WriteString(msg)
+
+	return c.output(), nil
+}
+
+func (c *Command) EliminatingLeftIndirectRecursion() (string, error) {
+	c.outputBuffer.Reset()
+	c.outputBuffer.WriteString("Вызов устранения косвенной левой рекурсии\n")
+
+	out := c.grammar.Copy().RemoveCycles().EliminateLeftRecursion().String()
+	filename := fs.AddSuffixToFilename(c.grammarFileName, leftIndirectSuf)
+	err := fs.WriteStringToFile(out, filename)
+	if err != nil {
+		msg := fmt.Sprintf("Ошибка при записи файла %s: %v\n", filename, err)
+		c.outputBuffer.WriteString(msg)
+
+		return c.output(), err
+	}
+
+	msg := fmt.Sprintf("Грамматика записана в файл %s\n", filename)
+	c.outputBuffer.WriteString(msg)
+
+	return c.output(), nil
+}
+
+func (c *Command) EliminationUselessSymbols() (string, error) {
+	c.outputBuffer.Reset()
+	c.outputBuffer.WriteString("Вызов устранения бесполезных символов\n")
+	out := c.grammar.Copy().EliminationUselessSymbols().String()
+
+	filename := fs.AddSuffixToFilename(c.grammarFileName, UnlessSymSuf)
+	err := fs.WriteStringToFile(out, filename)
+	if err != nil {
+		msg := fmt.Sprintf("Ошибка при записи файла %s: %v\n", filename, err)
+		c.outputBuffer.WriteString(msg)
+
+		return c.output(), err
+	}
+
+	msg := fmt.Sprintf("Грамматика записана в файл %s\n", filename)
+	c.outputBuffer.WriteString(msg)
+
+	return c.output(), nil
+}
+\end{lstlisting}
+
+\begin{lstlisting}[language=Go, caption={Код модуля \textit{fs}}, label=lst2]
+package fs
+
+import (
+	"os"
+	"path/filepath"
+)
+
+func AddSuffixToFilename(filename, suffix string) string {
+	ext := filepath.Ext(filename)
+	name := filename[:len(filename)-len(ext)]
+	return name + suffix + ext
+}
+
+func WriteStringToFile(data, filename string) error {
+	return os.WriteFile(filename, []byte(data), 0644)
+}
+
+\end{lstlisting}
+
+
+\newpage
