@@ -1,0 +1,1023 @@
+\section{Практическая часть}
+
+\subsection{Результат выполнения работы}
+
+В таблице~\ref{tbl:result} приведены результаты работы программы.
+
+\begin{table}[H]
+    \centering
+	\caption{Результаты расчетов для задачи из индивидуального варианта}
+    \label{tbl:result}
+\begin{tabular}{|l|l|l|}
+\hline
+Регулярное выражение        & Входная строка & Результат \\ \hline
+\multirow{4}{*}{(ab)*c}     & a              & НЕТ       \\ \cline{2-3} 
+                            & abc            & ДА        \\ \cline{2-3} 
+                            & c              & ДА        \\ \cline{2-3} 
+                            & ababc          & ДА        \\ \hline
+\multirow{4}{*}{(a|b)*c}    & a              & НЕТ       \\ \cline{2-3} 
+                            & ac             & ДА        \\ \cline{2-3} 
+                            & abc            & ДА        \\ \cline{2-3} 
+                            & aaaaaaabc      & ДА        \\ \hline
+\multirow{4}{*}{ab(ab|b*)*} & ab             & ДА        \\ \cline{2-3} 
+                            & ababb          & ДА        \\ \cline{2-3} 
+                            & c              & НЕТ       \\ \cline{2-3} 
+                            & ababbab        & ДА        \\ \hline
+\end{tabular}
+\end{table}
+
+\subsection{Код программы}
+
+В листингах~\ref{lst1}~---~\ref{lst2} приведен код программы на языке Go.
+
+\begin{lstlisting}[language=Go, caption={Код модуля \textit{commands}}, label=lst1]
+package commands
+
+import (
+	"bytes"
+	"fmt"
+	"github.com/AskaryanKarine/BMSTU-CC/lab_01/internal/dfa"
+	"github.com/AskaryanKarine/BMSTU-CC/lab_01/internal/fs"
+	"github.com/AskaryanKarine/BMSTU-CC/lab_01/internal/nfa"
+	"github.com/AskaryanKarine/BMSTU-CC/lab_01/internal/transform"
+	"os"
+	"os/exec"
+)
+
+const (
+	nfaFileDot = "graphs/nfa.dot"
+	nfaFilePng = "graphs/nfa.png"
+	dfaFileDot = "graphs/dfa.dot"
+	dfaFilePng = "graphs/dfa.png"
+	minFileDot = "graphs/min.dot"
+	minFilePng = "graphs/min.png"
+	stepsDir   = "graphs/emulate/"
+)
+
+type Commands struct {
+	outputBuffer bytes.Buffer
+	dfa          *dfa.DFA
+}
+
+func (c *Commands) RegularToFAs(input string) (string, error) {
+	c.outputBuffer.Reset()
+	postfixForm := transform.InfixToPostfix(input)
+
+	initialNFA := nfa.Build(postfixForm)
+	if err := c.saveAutomaton("NFA", initialNFA.ToGraphviz(), nfaFileDot, nfaFilePng); err != nil {
+		return c.output(), err
+	}
+
+	builtDFA := dfa.Build(initialNFA)
+	if err := c.saveAutomaton("DFA", builtDFA.ToGraphviz(), dfaFileDot, dfaFilePng); err != nil {
+		return c.output(), err
+	}
+
+	minimizeDFA := builtDFA.Minimize()
+	if err := c.saveAutomaton("Minimized DFA", minimizeDFA.ToGraphviz(), minFileDot, minFilePng); err != nil {
+		return c.output(), err
+	}
+
+	c.dfa = minimizeDFA
+
+	return c.output(), nil
+}
+
+func (c *Commands) saveAutomaton(name, dotData, dotPath, pngPath string) error {
+	if err := os.WriteFile(dotPath, []byte(dotData), 0644); err != nil {
+		msg := fmt.Sprintf("create file %s error: %v\n", name, err)
+		c.outputBuffer.WriteString(msg)
+
+		return fmt.Errorf(msg)
+	}
+
+	cmd := exec.Command("dot", "-Tpng", "-o", pngPath, dotPath)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		% msg := fmt.Sprintf("Graphviz error for %s: %v\nOutput: %s\n", name, err, string(output))
+		c.outputBuffer.WriteString(msg)
+
+		return fmt.Errorf(msg)
+	}
+
+	return nil
+}
+
+func (c *Commands) Emulate(input string) (string, error) {
+	c.outputBuffer.Reset()
+
+	err := fs.RecreateEmulateDir()
+	if err != nil {
+		% msg := fmt.Sprintf("error for create folder emulate: %v\n", err)
+		c.outputBuffer.WriteString(msg)
+
+		return c.output(), err
+	}
+	steps, ok := c.dfa.SimulateDFA(input)
+	for i, step := range steps {
+		name := fmt.Sprintf("step_%d", i)
+		err := c.saveAutomaton(name, step, stepsDir+name+".dot", stepsDir+name+".png")
+		if err != nil {
+			return c.output(), err
+		}
+	}
+
+	if ok {
+		% msg := fmt.Sprintf("String %s is OK", input)
+		c.outputBuffer.WriteString(msg)
+	} else {
+		% msg := fmt.Sprintf("String %s isn't OK", input)
+		c.outputBuffer.WriteString(msg)
+	}
+
+	return c.output(), nil
+}
+
+func (c *Commands) output() string {
+	return c.outputBuffer.String()
+}
+\end{lstlisting}
+
+\begin{lstlisting}[language=Go, caption={Код модуля \textit{dfa}}]
+package dfa
+
+import (
+	"fmt"
+	"github.com/AskaryanKarine/BMSTU-CC/lab_01/internal/nfa"
+)
+
+type State struct {
+	ID          int
+	NFAStates   map[int]bool
+	Transitions map[rune]int
+	IsFinal     bool
+}
+
+type DFA struct {
+	Start    int
+	States   map[int]*State
+	Alphabet []rune
+}
+
+func NewState(id int, nfaStates map[int]bool, isFinal bool) *State {
+	return &State{
+		ID:          id,
+		NFAStates:   nfaStates,
+		Transitions: make(map[rune]int),
+		IsFinal:     isFinal,
+	}
+}
+
+func Build(nfa *nfa.NFA) *DFA {
+	alphabet := nfa.ExtractAlphabet()
+
+	dfa := &DFA{
+		States:   make(map[int]*State),
+		Alphabet: alphabet,
+	}
+
+	startedStates := make(map[int]bool)
+	startedStates[nfa.Start.ID] = true
+
+	startNFAStates := nfa.EpsilonClosure(startedStates)
+	dfa.Start = 0
+	dfa.States[0] = NewState(0, startNFAStates, nfa.IsFinalState(startNFAStates))
+
+	queue := []int{0}
+	processed := make(map[int]bool)
+
+	stateID := 1
+
+	for len(queue) > 0 {
+		currentStateID := queue[0]
+		queue = queue[1:]
+
+		if processed[currentStateID] {
+			continue
+		}
+		processed[currentStateID] = true
+
+		currentState := dfa.States[currentStateID]
+
+		for _, symbol := range alphabet {
+			nextNFAStates := make(map[int]bool)
+			for nfaStateID := range currentState.NFAStates {
+				state := nfa.StateByID(nfaStateID)
+				for _, nextState := range state.Transitions[symbol] {
+					nextNFAStates[nextState.ID] = true
+				}
+			}
+
+			nextNFAStates = nfa.EpsilonClosure(nextNFAStates)
+
+			if len(nextNFAStates) == 0 {
+				continue
+			}
+
+			found := false
+			var nextStateID int
+			for id, state := range dfa.States {
+				if statesEqual(state.NFAStates, nextNFAStates) {
+					found = true
+					nextStateID = id
+					break
+				}
+			}
+
+			if !found {
+				nextStateID = stateID
+				dfa.States[nextStateID] = NewState(nextStateID, nextNFAStates, nfa.IsFinalState(nextNFAStates))
+				queue = append(queue, nextStateID)
+				stateID++
+			}
+
+			currentState.Transitions[symbol] = nextStateID
+		}
+	}
+
+	return dfa
+}
+
+func statesEqual(a, b map[int]bool) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for stateID := range a {
+		if !b[stateID] {
+			return false
+		}
+	}
+	return true
+}
+
+func (dfa *DFA) ToGraphviz() string {
+	graph := "digraph DFA {\n"
+	graph += "  rankdir=LR;\n"
+	graph += "  node [shape = circle];\n"
+
+	graph += fmt.Sprintf("  start [shape = point];\n")
+	graph += fmt.Sprintf("  start -> %d;\n", dfa.Start)
+
+	for _, state := range dfa.States {
+		if state.IsFinal {
+			graph += fmt.Sprintf("  %d [shape = doublecircle];\n", state.ID)
+		} else {
+			graph += fmt.Sprintf("  %d [shape = circle];\n", state.ID)
+		}
+	}
+
+	for _, state := range dfa.States {
+		for symbol, nextStateID := range state.Transitions {
+			graph += fmt.Sprintf("  %d -> %d [label=\"%c\"];\n", state.ID, nextStateID, symbol)
+		}
+	}
+
+	graph += "}\n"
+	return graph
+}
+
+func (dfa *DFA) SimulateDFA(input string) ([]string, bool) {
+	var steps []string
+	currentStateID := dfa.Start
+	currentState := dfa.States[currentStateID]
+
+	steps = append(steps, dfa.ToGraphvizWithHighlight(currentStateID, "Начало"))
+
+	for i, symbol := range input {
+		if nextStateID, exists := currentState.Transitions[symbol]; exists {
+			currentStateID = nextStateID
+			currentState = dfa.States[currentStateID]
+			steps = append(steps, dfa.ToGraphvizWithHighlight(currentStateID, fmt.Sprintf("Шаг %d -- символ '%c'", i+1, symbol)))
+		} else {
+			steps = append(steps, dfa.ToGraphvizWithError(currentStateID, symbol))
+			return steps, false
+		}
+	}
+
+	isAccepted := currentState.IsFinal
+	if isAccepted {
+		steps = append(steps, dfa.ToGraphvizWithHighlight(currentStateID, "Допускается"))
+	} else {
+		steps = append(steps, dfa.ToGraphvizWithHighlight(currentStateID, "НЕ допускается"))
+	}
+
+	return steps, isAccepted
+}
+
+func (dfa *DFA) ToGraphvizWithHighlight(currentStateID int, description string) string {
+	graph := "digraph DFA {\n"
+	graph += "  rankdir=LR;\n"
+	graph += "  node [shape = circle];\n"
+
+	graph += fmt.Sprintf("  start [shape = point];\n")
+	graph += fmt.Sprintf("  start -> %d;\n", dfa.Start)
+
+	for _, state := range dfa.States {
+		if state.IsFinal {
+			graph += fmt.Sprintf("  %d [shape = doublecircle];\n", state.ID)
+		} else {
+			graph += fmt.Sprintf("  %d [shape = circle];\n", state.ID)
+		}
+	}
+
+	graph += fmt.Sprintf("  %d [color=red, fontcolor=red];\n", currentStateID)
+
+	graph += fmt.Sprintf("  labelloc=\"t\";\n")
+	graph += fmt.Sprintf("  label=\"%s\";\n", description)
+
+	for _, state := range dfa.States {
+		for symbol, nextStateID := range state.Transitions {
+			graph += fmt.Sprintf("  %d -> %d [label=\"%c\"];\n", state.ID, nextStateID, symbol)
+		}
+	}
+
+	graph += "}\n"
+	return graph
+}
+
+func (dfa *DFA) ToGraphvizWithError(currentStateID int, symbol rune) string {
+	graph := "digraph DFA {\n"
+	graph += "  rankdir=LR;\n"
+	graph += "  node [shape = circle];\n"
+
+	graph += fmt.Sprintf("  start [shape = point];\n")
+	graph += fmt.Sprintf("  start -> %d;\n", dfa.Start)
+
+	for _, state := range dfa.States {
+		if state.IsFinal {
+			graph += fmt.Sprintf("  %d [shape = doublecircle];\n", state.ID)
+		} else {
+			graph += fmt.Sprintf("  %d [shape = circle];\n", state.ID)
+		}
+	}
+
+	graph += fmt.Sprintf("  %d [color=red, fontcolor=red];\n", currentStateID)
+	graph += fmt.Sprintf("  %d -> ошибка [label=\"%c\"];\n", currentStateID, symbol)
+	graph += "  ошибка [shape=box, color=red, fontcolor=red];\n"
+
+	graph += fmt.Sprintf("  labelloc=\"t\";\n")
+	graph += fmt.Sprintf("  label=\"Ошибка: нет перехода для символа '%c'\";\n", symbol)
+
+	for _, state := range dfa.States {
+		for symbol, nextStateID := range state.Transitions {
+			graph += fmt.Sprintf("  %d -> %d [label=\"%c\"];\n", state.ID, nextStateID, symbol)
+		}
+	}
+
+	graph += "}\n"
+	return graph
+}
+\end{lstlisting}
+
+\begin{lstlisting}[language=Go, caption={Код модуля \textit{dfa}}]
+package dfa
+
+func (dfa *DFA) buildReverseTransitions() map[int]map[rune][]int {
+	reverse := make(map[int]map[rune][]int)
+	for id := range dfa.States {
+		reverse[id] = make(map[rune][]int)
+	}
+	for fromID, state := range dfa.States {
+		for symbol, toID := range state.Transitions {
+			reverse[toID][symbol] = append(reverse[toID][symbol], fromID)
+		}
+	}
+	return reverse
+}
+
+func (dfa *DFA) findReachable() map[int]bool {
+	reachable := make(map[int]bool)
+	queue := []int{dfa.Start}
+	reachable[dfa.Start] = true
+
+	for len(queue) > 0 {
+		current := queue[0]
+		queue = queue[1:]
+
+		for _, next := range dfa.States[current].Transitions {
+			if !reachable[next] {
+				reachable[next] = true
+				queue = append(queue, next)
+			}
+		}
+	}
+	return reachable
+}
+
+func (dfa *DFA) buildMarkedTable(reverseTransitions map[int]map[rune][]int) [][]bool {
+	maxID := 0
+	for id := range dfa.States {
+		if id > maxID {
+			maxID = id
+		}
+	}
+	marked := make([][]bool, maxID+1)
+	for i := range marked {
+		marked[i] = make([]bool, maxID+1)
+	}
+
+	var queue [][2]int
+	for i := range maxID + 1 {
+		for j := range maxID + 1 {
+			if !marked[i][j] && dfa.States[i].IsFinal != dfa.States[j].IsFinal {
+				marked[i][j] = true
+				marked[j][i] = true
+				queue = append(queue, [2]int{i, j})
+			}
+		}
+	}
+	
+	for len(queue) > 0 {
+		pair := queue[0]
+		queue = queue[1:]
+		u, v := pair[0], pair[1]
+
+		for _, symbol := range dfa.Alphabet {
+			for _, r := range reverseTransitions[u][symbol] {
+				for _, s := range reverseTransitions[v][symbol] {
+					if !marked[r][s] {
+						marked[r][s] = true
+						marked[s][r] = true
+						queue = append(queue, [2]int{r, s})
+					}
+				}
+			}
+		}
+	}
+
+	return marked
+}
+
+func (dfa *DFA) buildComponents(marked [][]bool, reachable map[int]bool) []int {
+	component := make([]int, len(dfa.States))
+	currentComp := 0
+
+	for id := range dfa.States {
+		component[id] = -1
+	}
+
+	for i := range len(dfa.States) {
+		if !marked[0][i] {
+			component[i] = currentComp
+		}
+	}
+
+	for id := 1; id < len(component); id++ {
+		if !reachable[id] {
+			continue
+		}
+		if component[id] == -1 {
+			currentComp++
+			component[id] = currentComp
+			for j := id + 1; j < len(component); j++ {
+				if !marked[id][j] {
+					component[j] = currentComp
+				}
+			}
+		}
+	}
+
+	return component
+}
+
+func (dfa *DFA) buildMinimizedDFA(component []int) *DFA {
+	minimized := &DFA{
+		States:   make(map[int]*State),
+		Alphabet: dfa.Alphabet,
+	}
+
+	compToState := make(map[int]*State)
+	for _, comp := range component {
+		if comp == -1 {
+			continue // Игнорируем недостижимые
+		}
+		if _, exists := compToState[comp]; !exists {
+			isFinal := false
+			for stateID, c := range component {
+				if c == comp && dfa.States[stateID].IsFinal {
+					isFinal = true
+					break
+				}
+			}
+			newState := &State{
+				ID:          comp,
+				IsFinal:     isFinal,
+				Transitions: make(map[rune]int),
+			}
+			compToState[comp] = newState
+			minimized.States[comp] = newState
+		}
+	}
+
+	for comp, state := range compToState {
+		var sampleStateID int
+		for id, c := range component {
+			if c == comp {
+				sampleStateID = id
+				break
+			}
+		}
+		for symbol, targetID := range dfa.States[sampleStateID].Transitions {
+			targetComp := component[targetID]
+			if targetComp != -1 {
+				state.Transitions[symbol] = targetComp
+			}
+		}
+	}
+
+	minimized.Start = component[dfa.Start]
+	return minimized
+}
+
+func (dfa *DFA) Minimize() *DFA {
+	extendedDFA := dfa.addZeroState()
+
+	reverseTransitions := extendedDFA.buildReverseTransitions()
+
+	reachable := extendedDFA.findReachable()
+
+	marked := extendedDFA.buildMarkedTable(reverseTransitions)
+
+	component := extendedDFA.buildComponents(marked, reachable)
+
+	minimized := extendedDFA.buildMinimizedDFA(component)
+
+	return minimized.removeZeroState()
+}
+
+func (dfa *DFA) addZeroState() *DFA {
+	newDFA := &DFA{
+		Start:    dfa.Start + 1, // Стартовое состояние теперь ID+1
+		Alphabet: dfa.Alphabet,
+		States:   make(map[int]*State),
+	}
+
+	for oldID, state := range dfa.States {
+		newState := &State{
+			ID:          oldID + 1,
+			Transitions: make(map[rune]int),
+			IsFinal:     state.IsFinal,
+		}
+		for symbol, target := range state.Transitions {
+			newState.Transitions[symbol] = target + 1
+		}
+		newDFA.States[newState.ID] = newState
+	}
+
+	trap := &State{
+		ID:          0,
+		Transitions: make(map[rune]int),
+		IsFinal:     false,
+	}
+	for _, symbol := range newDFA.Alphabet {
+		trap.Transitions[symbol] = 0
+	}
+	newDFA.States[0] = trap
+
+	for _, state := range newDFA.States {
+		if state.ID == 0 {
+			continue
+		}
+		for _, symbol := range newDFA.Alphabet {
+			if _, exists := state.Transitions[symbol]; !exists {
+				state.Transitions[symbol] = 0
+			}
+		}
+	}
+
+	return newDFA
+}
+
+func (dfa *DFA) removeZeroState() *DFA {
+	cleaned := &DFA{
+		Start:    dfa.Start,
+		Alphabet: dfa.Alphabet,
+		States:   make(map[int]*State),
+	}
+
+	for id, state := range dfa.States {
+		if id == 0 {
+			continue
+		}
+		newState := &State{
+			ID:          state.ID,
+			IsFinal:     state.IsFinal,
+			Transitions: make(map[rune]int),
+		}
+
+		for symbol, target := range state.Transitions {
+			if target != 0 {
+				newState.Transitions[symbol] = target
+			}
+		}
+
+		cleaned.States[id] = newState
+	}
+
+	return cleaned
+}
+\end{lstlisting}
+
+\begin{lstlisting}[language=Go, caption={Код модуля \textit{fs}}]
+package fs
+
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+)
+
+func CreateGraphsDir() error {
+	err := os.MkdirAll("graphs/emulate", 0755)
+	if err != nil {
+		return fmt.Errorf("error creating dirs: %v", err)
+	}
+	return nil
+}
+
+func DeleteGraphsDir() error {
+	err := os.RemoveAll("graphs")
+	if err != nil {
+		return fmt.Errorf("error deleting dir: %v", err)
+	}
+	return nil
+}
+
+func RecreateEmulateDir() error {
+	emulatePath := filepath.Join("graphs", "emulate")
+
+	if err := os.RemoveAll(emulatePath); err != nil {
+		return fmt.Errorf("can't delete folder: %v", err)
+	}
+
+	if err := os.MkdirAll(emulatePath, 0755); err != nil {
+		return fmt.Errorf("can't create folder: %v", err)
+	}
+
+	return nil
+}
+\end{lstlisting}
+
+\begin{lstlisting}[language=Go, caption={Код модуля \textit{nfa}}]
+package nfa
+
+import (
+	"fmt"
+	"sort"
+)
+
+const EPS = 'eps'
+
+type State struct {
+	ID          int
+	Transitions map[rune][]*State
+	IsFinal     bool
+}
+
+type NFA struct {
+	Start *State
+	End   *State
+}
+
+func (a *NFA) ExtractAlphabet() []rune {
+	alphabetMap := make(map[rune]bool)
+
+	var traverse func(state *State)
+	traverse = func(state *State) {
+		for symbol := range state.Transitions {
+			if symbol != EPS {
+				alphabetMap[symbol] = true
+			}
+		}
+	}
+
+	visited := make(map[int]bool)
+	stack := []*State{a.Start}
+
+	for len(stack) > 0 {
+		state := stack[len(stack)-1]
+		stack = stack[:len(stack)-1]
+
+		if state == nil {
+			continue
+		}
+
+		if visited[state.ID] {
+			continue
+		}
+		visited[state.ID] = true
+
+		traverse(state)
+
+		for _, nextStates := range state.Transitions {
+			for _, nextState := range nextStates {
+				stack = append(stack, nextState)
+			}
+		}
+	}
+
+	alphabet := make([]rune, 0, len(alphabetMap))
+	for symbol := range alphabetMap {
+		alphabet = append(alphabet, symbol)
+	}
+
+	sort.Slice(alphabet, func(i, j int) bool {
+		return alphabet[i] < alphabet[j]
+	})
+
+	return alphabet
+}
+
+func NewState(id int) *State {
+	return &State{
+		ID:          id,
+		Transitions: make(map[rune][]*State),
+	}
+}
+
+func New(start, end *State) *NFA {
+	return &NFA{Start: start, End: end}
+}
+
+func Build(postfix string) *NFA {
+	var stack []*NFA
+	stateID := 0
+
+	for _, char := range postfix {
+		switch char {
+		case '.':
+			nfa2 := stack[len(stack)-1]
+			nfa1 := stack[len(stack)-2]
+			stack = stack[:len(stack)-2]
+
+			nfa1.End.Transitions[EPS] = append(nfa1.End.Transitions[EPS], nfa2.Start)
+
+			stack = append(stack, New(nfa1.Start, nfa2.End))
+		case '|':
+			nfa2 := stack[len(stack)-1]
+			nfa1 := stack[len(stack)-2]
+			stack = stack[:len(stack)-2]
+
+			start := NewState(stateID)
+			stateID++
+			end := NewState(stateID)
+			stateID++
+
+			start.Transitions[EPS] = append(start.Transitions[EPS], nfa1.Start, nfa2.Start)
+
+			nfa1.End.Transitions[EPS] = append(nfa1.End.Transitions[EPS], end)
+			nfa2.End.Transitions[EPS] = append(nfa2.End.Transitions[EPS], end)
+
+			stack = append(stack, New(start, end))
+		case '?':
+			nfa := stack[len(stack)-1]
+			stack = stack[:len(stack)-1]
+
+			start := NewState(stateID)
+			stateID++
+			end := NewState(stateID)
+			stateID++
+
+			start.Transitions[EPS] = append(start.Transitions[EPS], nfa.Start, end)
+			nfa.End.Transitions[EPS] = append(nfa.End.Transitions[EPS], end)
+
+			stack = append(stack, New(start, end))
+		case '*':
+			nfa := stack[len(stack)-1]
+			stack = stack[:len(stack)-1]
+
+			start := NewState(stateID)
+			stateID++
+			end := NewState(stateID)
+			stateID++
+
+			start.Transitions[EPS] = append(start.Transitions[EPS], nfa.Start, end)
+			nfa.End.Transitions[EPS] = append(nfa.End.Transitions[EPS], nfa.Start)
+			nfa.End.Transitions[EPS] = append(nfa.End.Transitions[EPS], end)
+
+			stack = append(stack, New(start, end))
+		case '+':
+			nfa := stack[len(stack)-1]
+			stack = stack[:len(stack)-1]
+
+			start := NewState(stateID)
+			stateID++
+			end := NewState(stateID)
+			stateID++
+
+			start.Transitions[EPS] = append(start.Transitions[EPS], nfa.Start)
+			nfa.End.Transitions[EPS] = append(nfa.End.Transitions[EPS], nfa.Start)
+			nfa.End.Transitions[EPS] = append(nfa.End.Transitions[EPS], end)
+
+			stack = append(stack, New(start, end))
+		default:
+			start := NewState(stateID)
+			stateID++
+			end := NewState(stateID)
+			stateID++
+
+			start.Transitions[char] = append(start.Transitions[char], end)
+			stack = append(stack, New(start, end))
+		}
+	}
+
+	stack[0].End.IsFinal = true
+	return stack[0]
+}
+
+func (a *NFA) ToGraphviz() string {
+	graph := "digraph NFA {\n"
+	graph += "  rankdir=LR;\n"
+	graph += "  node [shape = circle];\n"
+
+	graph += "  start [shape = point];\n"
+	graph += fmt.Sprintf("  start -> %d;\n", a.Start.ID)
+
+	graph += fmt.Sprintf("  %d [shape = doublecircle];\n", a.End.ID)
+
+	visited := make(map[*State]bool)
+	stack := []*State{a.Start}
+
+	for len(stack) > 0 {
+		state := stack[len(stack)-1]
+		stack = stack[:len(stack)-1]
+
+		if visited[state] {
+			continue
+		}
+		visited[state] = true
+
+		graph += fmt.Sprintf("  %d [label=\"%d\"];\n", state.ID, state.ID)
+
+		for char, nextStates := range state.Transitions {
+			for _, nextState := range nextStates {
+				graph += fmt.Sprintf("  %d -> %d [label=\"%c\"];\n", state.ID, nextState.ID, char)
+				stack = append(stack, nextState)
+			}
+		}
+	}
+
+	graph += "}\n"
+	return graph
+}
+
+func (a *NFA) StateByID(stateID int) *State {
+	visited := make(map[int]bool)
+	stack := []*State{a.Start}
+
+	for len(stack) > 0 {
+		state := stack[len(stack)-1]
+		stack = stack[:len(stack)-1]
+
+		if visited[state.ID] {
+			continue
+		}
+		visited[state.ID] = true
+
+		if state.ID == stateID {
+			return state
+		}
+
+		for _, nextStates := range state.Transitions {
+			for _, nextState := range nextStates {
+				stack = append(stack, nextState)
+			}
+		}
+	}
+
+	return nil
+}
+
+func (a *NFA) IsFinalState(states map[int]bool) bool {
+	for stateID := range states {
+		state := a.StateByID(stateID)
+		if state.IsFinal {
+			return true
+		}
+	}
+	return false
+}
+
+func (a *NFA) EpsilonClosure(states map[int]bool) map[int]bool {
+	closure := make(map[int]bool)
+	for stateID := range states {
+		closure[stateID] = true
+	}
+
+	stack := make([]int, 0, len(states))
+	for stateID := range states {
+		stack = append(stack, stateID)
+	}
+
+	for len(stack) > 0 {
+		currentStateID := stack[len(stack)-1]
+		stack = stack[:len(stack)-1]
+
+		state := a.StateByID(currentStateID)
+		for _, nextState := range state.Transitions[EPS] {
+			if !closure[nextState.ID] {
+				closure[nextState.ID] = true
+				stack = append(stack, nextState.ID)
+			}
+		}
+	}
+
+	return closure
+}
+\end{lstlisting}
+
+\begin{lstlisting}[language=Go, caption={Код модуля \textit{transform}}, label=lst2]
+package transform
+
+import (
+	"strings"
+	"unicode"
+)
+
+const (
+	maxPriority = 4
+)
+
+func insertConcatOperators(infix string) string {
+	var result strings.Builder
+	n := len(infix)
+
+	for i := 0; i < n; i++ {
+		result.WriteByte(infix[i])
+
+		if i+1 < n && isImplicitConcat(infix[i], infix[i+1]) {
+			result.WriteByte('.')
+		}
+	}
+
+	return result.String()
+}
+
+func isImplicitConcat(a, b byte) bool {
+	return (isAlphanumeric(a) && isAlphanumeric(b)) ||
+		(isAlphanumeric(a) && b == '(') ||
+		(a == ')' && isAlphanumeric(b)) ||
+		((a == '*' || a == '+') && (isAlphanumeric(b) || b == '(')) || (a == ')' && b == '(')
+}
+
+func isAlphanumeric(c byte) bool {
+	r := rune(c)
+	return unicode.IsLetter(r) || unicode.IsDigit(r)
+}
+
+func getOpPrecedence(r rune) int {
+	specialCharsPriorityMap := map[rune]int{
+		'(': 1,
+		'|': 2,
+		'.': 3,
+		'?': 4,
+		'*': 4,
+		'+': 4,
+	}
+
+	if priority, ok := specialCharsPriorityMap[r]; ok {
+		return priority
+	}
+	return maxPriority + 1
+}
+
+func InfixToPostfix(infix string) string {
+	infix = insertConcatOperators(infix)
+
+	var (
+		postfix []rune
+		stack   []rune
+	)
+
+	for _, r := range infix {
+		switch r {
+		case '(':
+			stack = append(stack, r)
+		case ')':
+			for len(stack) > 0 && stack[len(stack)-1] != '(' {
+				postfix = append(postfix, stack[len(stack)-1])
+				stack = stack[:len(stack)-1]
+			}
+			if len(stack) > 0 {
+				stack = stack[:len(stack)-1]
+			}
+		default:
+			for len(stack) > 0 && getOpPrecedence(stack[len(stack)-1]) >= getOpPrecedence(r) {
+				postfix = append(postfix, stack[len(stack)-1])
+				stack = stack[:len(stack)-1]
+			}
+			stack = append(stack, r)
+		}
+
+	}
+
+	for len(stack) > 0 {
+		postfix = append(postfix, stack[len(stack)-1])
+		stack = stack[:len(stack)-1]
+	}
+
+	return string(postfix)
+}
+\end{lstlisting}
+
+
+\newpage
