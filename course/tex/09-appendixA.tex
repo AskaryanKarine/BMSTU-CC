@@ -1,0 +1,54 @@
+\renewcommand\appendixname{ПРИЛОЖЕНИЕ}
+
+\titleformat{\section}[block]
+{\bfseries\large}
+{\appendixname~\thesection\centering\\}
+{0pt}
+{\centering}
+
+\renewcommand{\thesection}{\Asbuk{section}}
+
+\section{Настройка ClickHouse}
+\label{appendix:a}
+
+В листинге~\ref{lst:kafka-click} представлена настройка одной связи между топиком Kafka и таблицей в ClickHouse.
+
+\begin{lstlisting}[language=sql, caption={Настройка связи между Kafka и ClickHouse}, label=lst:kafka-click]
+create table `kafka-tfidf`
+(
+	id_user  UInt64,
+	id_movie UInt64,
+	cosine   Float64,
+	time     String
+)
+engine = Kafka('kafka1:9091', 'tf-idf-recommendations', 'group', 'JSONEachRow');
+
+create table `tfidf-recommendations`
+(
+	id_user  UInt64,
+	id_movie UInt64,
+	cosine   Float64,
+	time     DateTime('Europe/Moscow')
+)
+engine = MergeTree ORDER BY (id_user, id_movie)
+SETTINGS index_granularity = 8192;
+
+CREATE MATERIALIZED VIEW WatchBoxRecommender.consumer
+TO WatchBoxRecommender.`tfidf-recommendations`
+(
+	`id_user` UInt64,
+	`id_movie` UInt64,
+	`cosine` Float64,
+	`time` DateTime('Europe/Moscow')
+)
+AS
+SELECT id_user,
+			   id_movie,
+			   cosine,
+		 	   parseDateTimeBestEffort(time, 'Europe/Moscow') AS time
+FROM WatchBoxRecommender.`kafka-tfidf`;
+
+
+\end{lstlisting}
+
+\newpage
