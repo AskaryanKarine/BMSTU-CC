@@ -203,7 +203,7 @@ func (p *Parser) parseOperator() (*ASTNode, bool) {
 }
 
 func (p *Parser) parseOperatorTail() (*ASTNode, bool) {
-	if !p.match(lexer.TokenSEMICOLON) {
+	if p.CurrentToken().Type == lexer.TokenEND {
 		return &ASTNode{
 			Type: "OperatorTail",
 		}, true
@@ -211,6 +211,10 @@ func (p *Parser) parseOperatorTail() (*ASTNode, bool) {
 
 	op, ok := p.parseOperator()
 	if !ok {
+		return nil, false
+	}
+
+	if !p.match(lexer.TokenSEMICOLON) {
 		return nil, false
 	}
 
@@ -228,6 +232,10 @@ func (p *Parser) parseOperatorTail() (*ASTNode, bool) {
 func (p *Parser) parseStmtList() (*ASTNode, bool) {
 	first, ok := p.parseOperator()
 	if !ok {
+		return nil, false
+	}
+
+	if !p.match(lexer.TokenSEMICOLON) {
 		return nil, false
 	}
 
