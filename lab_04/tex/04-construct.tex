@@ -1,0 +1,606 @@
+\section{Практическая часть}
+
+\subsection{Результат выполнения работы}
+
+В листинге~\ref{lst:input} представлены входные данные. На рисунке~\ref{img:ast.png} --- построенное AST-дерево.
+
+\begin{lstlisting}[language=Go, caption={Входная программа}, label=lst:input]
+a < b + c
+\end{lstlisting}
+
+\img{0.5\textwidth}{ast.png}{}
+
+\subsection{Код программы}
+
+В листингах~\ref{lst1}~---~\ref{lst2} приведен код программы на языке Go.
+
+\begin{lstlisting}[language=Go, caption={Код модуля \textit{lexer}}, label=lst1]
+package lexer
+
+import "unicode"
+
+type Lexer struct {
+	input   string
+	pos     int
+	line    int
+	column  int
+	start   int
+	startLn int
+	startCl int
+}
+
+func NewLexer(input string) *Lexer {
+	return &Lexer{
+		input:  input,
+		line:   1,
+		column: 1,
+	}
+}
+
+func (l *Lexer) NextToken() Token {
+	l.skipWhitespace()
+
+	l.start = l.pos
+	l.startLn = l.line
+	l.startCl = l.column
+
+	if l.pos >= len(l.input) {
+		return Token{Type: TokenEOF}
+	}
+
+	if typ, ok := l.tryOperator(); ok {
+		return typ
+	}
+
+	ch := l.input[l.pos]
+
+	if unicode.IsLetter(rune(ch)) {
+		return l.readIdentifier()
+	}
+
+	if unicode.IsDigit(rune(ch)) {
+		return l.readNumber()
+	}
+
+	l.pos++
+	l.column++
+	return Token{Type: TokenERROR, Literal: string(ch)}
+}
+
+func (l *Lexer) tryOperator() (Token, bool) {
+	if l.pos+1 < len(l.input) {
+		sub := l.input[l.pos : l.pos+2]
+		if typ, ok := operators[sub]; ok {
+			tok := Token{
+				Type:    typ,
+				Literal: sub,
+			}
+			l.pos += 2
+			l.column += 2
+			return tok, true
+		}
+	}
+
+	sub := l.input[l.pos : l.pos+1]
+	if typ, ok := operators[sub]; ok {
+		tok := Token{
+			Type:    typ,
+			Literal: sub,
+		}
+		l.pos++
+		l.column++
+		return tok, true
+	}
+
+	return Token{}, false
+}
+
+func (l *Lexer) skipWhitespace() {
+	for l.pos < len(l.input) {
+		ch := l.input[l.pos]
+		if ch == '\n' {
+			l.line++
+			l.column = 1
+			l.pos++
+			continue
+		}
+		if unicode.IsSpace(rune(ch)) {
+			l.pos++
+			l.column++
+			continue
+		}
+		break
+	}
+}
+
+func (l *Lexer) readIdentifier() Token {
+	start := l.pos
+	for l.pos < len(l.input) {
+		ch := rune(l.input[l.pos])
+		if !unicode.IsLetter(ch) && !unicode.IsDigit(ch) && ch != '_' {
+			break
+		}
+		l.pos++
+		l.column++
+	}
+
+	literal := l.input[start:l.pos]
+
+	if typ, ok := keywords[literal]; ok {
+		return Token{Type: typ, Literal: literal}
+	}
+	return Token{Type: TokenIDENT, Literal: literal}
+}
+
+func (l *Lexer) readNumber() Token {
+	start := l.pos
+	for l.pos < len(l.input) {
+		ch := rune(l.input[l.pos])
+		if !unicode.IsDigit(ch) {
+			break
+		}
+		l.pos++
+		l.column++
+	}
+
+	literal := l.input[start:l.pos]
+	return Token{Type: TokenNUMBER, Literal: literal}
+}
+\end{lstlisting}
+
+\begin{lstlisting}[language=Go, caption={Код модуля \textit{lexer}}]
+package lexer
+
+const (
+	TokenEOF = iota
+	TokenERROR
+	TokenIDENT
+	TokenNUMBER
+	TokenBEGIN
+	TokenEND
+	TokenSEMICOLON
+	TokenASSIGN
+	TokenEQ
+	TokenPLUS
+	TokenMINUS
+	TokenMULT
+	TokenDIV
+	TokenLT
+	TokenLE
+	TokenGT
+	TokenGE
+	TokenNE
+	TokenLPAREN
+	TokenRPAREN
+)
+
+var (
+	keywords = map[string]int{
+		"begin": TokenBEGIN,
+		"end":   TokenEND,
+	}
+
+	operators = map[string]int{
+		";":  TokenSEMICOLON,
+		"=":  TokenASSIGN,
+		"==": TokenEQ,
+		"+":  TokenPLUS,
+		"-":  TokenMINUS,
+		"*":  TokenMULT,
+		"/":  TokenDIV,
+		"(":  TokenLPAREN,
+		")":  TokenRPAREN,
+		"<":  TokenLT,
+		"<=": TokenLE,
+		">":  TokenGT,
+		">=": TokenGE,
+		"<>": TokenNE,
+	}
+)
+
+type Token struct {
+	Type    int
+	Literal string
+}
+
+func (l *Lexer) Tokenize() []Token {
+	var tokens []Token
+	for {
+		tok := l.NextToken()
+		tokens = append(tokens, tok)
+		if tok.Type == TokenEOF || tok.Type == TokenERROR {
+			break
+		}
+	}
+	return tokens
+}
+\end{lstlisting}
+
+\begin{lstlisting}[language=Go, caption={Код модуля \textit{parser}}]
+package parser
+
+import "github.com/AskaryanKarine/BMSTU-CC/lab_04/internal/lexer"
+
+type ASTNode struct {
+	Type     string
+	Value    string
+	Children []*ASTNode
+	Token    lexer.Token
+}
+
+type Parser struct {
+	tokens []lexer.Token
+	pos    int
+}
+
+func NewParser(tokens []lexer.Token) *Parser {
+	return &Parser{
+		tokens: tokens,
+	}
+}
+
+func (p *Parser) CurrentToken() lexer.Token {
+	if p.pos >= len(p.tokens) {
+		return lexer.Token{Type: lexer.TokenEOF}
+	}
+	return p.tokens[p.pos]
+}
+
+func (p *Parser) advance() {
+	p.pos++
+}
+
+func (p *Parser) match(tokenType int) bool {
+	if p.CurrentToken().Type == tokenType {
+		p.advance()
+		return true
+	}
+	return false
+}
+
+func (p *Parser) expect(tokenType int) (lexer.Token, bool) {
+	tok := p.CurrentToken()
+	if tok.Type == tokenType {
+		p.advance()
+		return tok, true
+	}
+	return tok, false
+}
+
+// Правила грамматики
+func (p *Parser) parseFactor() (*ASTNode, bool) {
+	tok := p.CurrentToken()
+	switch tok.Type {
+	case lexer.TokenIDENT:
+		p.advance()
+		return &ASTNode{
+			Type:  "Factor",
+			Value: tok.Literal,
+			Token: tok,
+		}, true
+	case lexer.TokenNUMBER:
+		p.advance()
+		return &ASTNode{
+			Type:  "Factor",
+			Value: tok.Literal,
+			Token: tok,
+		}, true
+	case lexer.TokenLPAREN:
+		p.advance()
+		expr, ok := p.parseArithExpr()
+		if !ok {
+			return nil, false
+		}
+		if _, ok := p.expect(lexer.TokenRPAREN); !ok {
+			return nil, false
+		}
+		return &ASTNode{
+			Type:     "Factor",
+			Children: []*ASTNode{expr},
+			Token:    tok,
+		}, true
+	default:
+		return nil, false
+	}
+}
+
+func (p *Parser) parseTerm() (*ASTNode, bool) {
+	left, ok := p.parseFactor()
+	if !ok {
+		return nil, false
+	}
+
+	for {
+		tok := p.CurrentToken()
+		if tok.Type == lexer.TokenMULT || tok.Type == lexer.TokenDIV {
+			p.advance()
+			right, ok := p.parseFactor()
+			if !ok {
+				return nil, false
+			}
+			left = &ASTNode{
+				Type: "Term",
+				Children: []*ASTNode{
+					left,
+					{Type: "MulOp", Value: tok.Literal, Token: tok},
+					right,
+				},
+				Token: tok,
+			}
+		} else {
+			break
+		}
+	}
+	return left, true
+}
+
+func (p *Parser) parseArithExpr() (*ASTNode, bool) {
+	left, ok := p.parseTerm()
+	if !ok {
+		return nil, false
+	}
+
+	for {
+		tok := p.CurrentToken()
+		if tok.Type == lexer.TokenPLUS || tok.Type == lexer.TokenMINUS {
+			p.advance()
+			right, ok := p.parseTerm()
+			if !ok {
+				return nil, false
+			}
+			left = &ASTNode{
+				Type: "ArithExpr",
+				Children: []*ASTNode{
+					left,
+					{Type: "AddOp", Value: tok.Literal, Token: tok},
+					right,
+				},
+				Token: tok,
+			}
+		} else {
+			break
+		}
+	}
+	return left, true
+}
+
+func (p *Parser) parseExpression() (*ASTNode, bool) {
+	left, ok := p.parseArithExpr()
+	if !ok {
+		return nil, false
+	}
+
+	tok := p.CurrentToken()
+	if tok.Type == lexer.TokenLT || tok.Type == lexer.TokenLE ||
+		tok.Type == lexer.TokenGT || tok.Type == lexer.TokenGE ||
+		tok.Type == lexer.TokenEQ || tok.Type == lexer.TokenNE {
+		p.advance()
+		right, ok := p.parseArithExpr()
+		if !ok {
+			return nil, false
+		}
+		return &ASTNode{
+			Type: "Expression",
+			Children: []*ASTNode{
+				left,
+				{Type: "RelOp", Value: tok.Literal, Token: tok},
+				right,
+			},
+			Token: tok,
+		}, true
+	}
+	return &ASTNode{
+		Type:     "Expression",
+		Children: []*ASTNode{left},
+		Token:    tok,
+	}, true
+}
+
+func (p *Parser) parseProgram() (*ASTNode, bool) {
+	expr, ok := p.parseExpression()
+	if !ok {
+		return nil, false
+	}
+
+	if p.CurrentToken().Type != lexer.TokenEOF {
+		return nil, false
+	}
+	return expr, true
+}
+
+func (p *Parser) Parse() (*ASTNode, bool) {
+	return p.parseProgram()
+}
+
+func ASTToRPN(node *ASTNode) []string {
+	if node == nil {
+		return nil
+	}
+
+	var rpn []string
+
+	if len(node.Children) == 3 &&
+		(node.Type == "Expression" || node.Type == "ArithExpr" || node.Type == "Term") {
+		left := ASTToRPN(node.Children[0])
+		right := ASTToRPN(node.Children[2])
+		op := ASTToRPN(node.Children[1])
+
+		rpn = append(rpn, left...)
+		rpn = append(rpn, right...)
+		rpn = append(rpn, op...)
+		return rpn
+	}
+
+	if node.Type == "Factor" {
+		if len(node.Children) == 3 {
+			return ASTToRPN(node.Children[1])
+		} else if len(node.Children) == 1 {
+			return ASTToRPN(node.Children[0])
+		}
+	}
+
+	if node.Value != "" {
+		return []string{node.Value}
+	}
+
+	for _, child := range node.Children {
+		rpn = append(rpn, ASTToRPN(child)...)
+	}
+
+	return rpn
+}
+
+func ASTToRPN1(node *ASTNode) ([]string, *ASTNode) {
+	if node == nil {
+		return nil, nil
+	}
+
+	switch node.Type {
+	case "Expression", "ArithExpr", "Term":
+		var rpn []string
+		var rpnNode *ASTNode
+		var childrenNodes []*ASTNode
+
+		for _, child := range node.Children {
+			childRPN, childNode := ASTToRPN1(child)
+			rpn = append(rpn, childRPN...)
+			if childNode != nil {
+				childrenNodes = append(childrenNodes, childNode)
+			}
+		}
+
+		// Для RPN дерева создаем узел-оператор с операндами в качестве детей
+		if len(childrenNodes) > 0 && node.Value != "" {
+			rpnNode = &ASTNode{
+				Type:  node.Type + "_RPN",
+				Value: node.Value,
+			}
+			for _, child := range childrenNodes {
+				rpnNode.Children = append(rpnNode.Children, child)
+			}
+		} else if len(childrenNodes) > 0 {
+			rpnNode = &ASTNode{
+				Type:     node.Type + "_RPN",
+				Children: childrenNodes,
+			}
+		}
+
+		return rpn, rpnNode
+
+	case "Factor", "Identifier", "Number":
+		return []string{node.Value}, &ASTNode{
+			Type:  node.Type + "_RPN",
+			Value: node.Value,
+			Token: node.Token,
+		}
+
+	case "AddOp", "MulOp", "RelOp":
+		return []string{node.Value}, &ASTNode{
+			Type:  node.Type + "_RPN",
+			Value: node.Value,
+			Token: node.Token,
+		}
+
+	default:
+		return nil, nil
+	}
+}
+\end{lstlisting}
+
+\begin{lstlisting}[language=Go, caption={Код модуля \textit{parser}}]
+package parser
+
+import (
+	"fmt"
+	"strings"
+)
+
+func GenerateDOT(node *ASTNode) string {
+	var builder strings.Builder
+	builder.WriteString("digraph AST {\n")
+	builder.WriteString("  node [shape=box, fontname=\"Courier\", fontsize=10];\n")
+	builder.WriteString("  edge [fontname=\"Courier\", fontsize=10];\n\n")
+
+	var nodeCounter int
+	generateDOTNode(&builder, node, &nodeCounter)
+
+	builder.WriteString("}\n")
+	return builder.String()
+}
+
+func generateDOTNode(builder *strings.Builder, node *ASTNode, counter *int) int {
+	if node == nil {
+		return -1
+	}
+
+	currentID := *counter
+	*counter++
+
+	label := node.Type
+	if node.Value != "" {
+		label += fmt.Sprintf("\\n%s", node.Value)
+	}
+
+	builder.WriteString(fmt.Sprintf("  node%d [label=\"%s\"];\n", currentID, label))
+
+	for _, child := range node.Children {
+		childID := generateDOTNode(builder, child, counter)
+		if childID >= 0 {
+			builder.WriteString(fmt.Sprintf("  node%d -> node%d;\n", currentID, childID))
+		}
+	}
+
+	return currentID
+}
+\end{lstlisting}
+
+\begin{lstlisting}[language=Go, caption={Код модуля \textit{fs}}, label=lst2]
+package fs
+
+import (
+	"bufio"
+	"fmt"
+	"os"
+	"os/exec"
+	"strings"
+)
+
+func ReadProgramFile(filename string) (string, error) {
+	file, err := os.Open(filename)
+	if err != nil {
+		return "", fmt.Errorf("ошибка открытия файла: %w", err)
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	var lines []string
+	for scanner.Scan() {
+		lines = append(lines, scanner.Text())
+	}
+	input := strings.Join(lines, "\n")
+	return input, nil
+}
+
+func SaveDOTToFile(dot, filenameDOT, filenamePNG string) error {
+	file, err := os.Create(filenameDOT)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	_, err = file.WriteString(dot)
+	if err != nil {
+		return err
+	}
+	cmd := exec.Command("dot", "-Tpng", "-o", filenamePNG, filenameDOT)
+	if _, err := cmd.CombinedOutput(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+\end{lstlisting}
+
+
+\newpage
