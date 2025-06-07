@@ -1,0 +1,80 @@
+\section{Тестовые программы с результатом на LLVM IR}
+\label{appendix:c}
+
+В листинге~\ref{lst:fib}~---~\ref{lst:fib-ir} представлен пример рекурсивного вычисления числа Фибоначчи и промежуточное представление LLVM IR.
+
+\begin{lstlisting}[language=sql, caption={Пример рекурсивного вычисления числа Фибоначчи}, label=lst:fib]
+алг main
+нач
+  цел i
+  нц для i от 1 до 10
+    вывод фибоначчи(i), нс
+  кц
+кон
+
+алг цел фибоначчи(цел n)
+нач
+  если n <= 2 то
+    знач := 1
+  иначе
+    знач := фибоначчи(n - 1) + фибоначчи(n - 2)
+  все
+кон
+\end{lstlisting}
+
+\begin{lstlisting}[language=sql, caption={Пример промежуточного представления LLVM IR для вычисления числа Фибоначчи}, label=lst:fib-ir]
+
+\end{lstlisting}
+
+В листинге~\ref{lst:fib-func}~---~\ref{lst:fib-func-ir} представлен пример вычисления числа Фибоначчи через цикл и промежуточное представление LLVM IR.
+
+\begin{lstlisting}[language=sql, caption={Пример вычисления числа Фибоначчи через цикл}, label=lst:fib-func]
+алг main
+нач
+  цел i
+  нц для i от 1 до 10
+    вывод фибоначчи(i), нс
+  кц
+кон
+
+алг цел фибоначчи(цел n)
+нач
+  если n <= 2 то
+    знач := 1
+  иначе
+    знач := фибоначчи(n - 1) + фибоначчи(n - 2)
+  все
+кон
+\end{lstlisting}
+
+\begin{lstlisting}[language=sql, caption={Пример промежуточного представления LLVM IR для вычисления числа Фибоначчи через цикл}, label=lst:fib-func-ir]
+
+\end{lstlisting}
+
+
+В листинге~\ref{lst:arr}~---~\ref{lst:arr-ir} представлен пример разворота массива и промежуточное представление LLVM IR.
+
+\begin{lstlisting}[language=sql, caption={Пример развтора массива}, label=lst:arr]
+алг main
+нач
+  цел i
+  нц для i от 1 до 10
+    вывод фибоначчи(i), нс
+  кц
+кон
+
+алг цел фибоначчи(цел n)
+нач
+  если n <= 2 то
+    знач := 1
+  иначе
+    знач := фибоначчи(n - 1) + фибоначчи(n - 2)
+  все
+кон
+\end{lstlisting}
+
+\begin{lstlisting}[language=sql, caption={Пример промежуточного представления LLVM IR для разворота массива}, label=lst:arr-ir]
+
+\end{lstlisting}
+
+\newpage

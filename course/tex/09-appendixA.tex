@@ -8,47 +8,373 @@
 
 \renewcommand{\thesection}{\Asbuk{section}}
 
-\section{Настройка ClickHouse}
+\section{Грамматика языка КуМир}
 \label{appendix:a}
 
-В листинге~\ref{lst:kafka-click} представлена настройка одной связи между топиком Kafka и таблицей в ClickHouse.
+В листинге~\ref{lst:kafka-click} представлен лексер грамматики в формате ANTRL.
 
-\begin{lstlisting}[language=sql, caption={Настройка связи между Kafka и ClickHouse}, label=lst:kafka-click]
-create table `kafka-tfidf`
-(
-	id_user  UInt64,
-	id_movie UInt64,
-	cosine   Float64,
-	time     String
-)
-engine = Kafka('kafka1:9091', 'tf-idf-recommendations', 'group', 'JSONEachRow');
+\begin{lstlisting}[language=sql, caption={Лексер грамматики в формате ANTRL}, label=lst:kafka-click]
+lexer grammar KumirLexer;
 
-create table `tfidf-recommendations`
-(
-	id_user  UInt64,
-	id_movie UInt64,
-	cosine   Float64,
-	time     DateTime('Europe/Moscow')
-)
-engine = MergeTree ORDER BY (id_user, id_movie)
-SETTINGS index_granularity = 8192;
+options { caseInsensitive = true; }
 
-CREATE MATERIALIZED VIEW WatchBoxRecommender.consumer
-TO WatchBoxRecommender.`tfidf-recommendations`
-(
-	`id_user` UInt64,
-	`id_movie` UInt64,
-	`cosine` Float64,
-	`time` DateTime('Europe/Moscow')
-)
-AS
-SELECT id_user,
-			   id_movie,
-			   cosine,
-		 	   parseDateTimeBestEffort(time, 'Europe/Moscow') AS time
-FROM WatchBoxRecommender.`kafka-tfidf`;
+ALG_HEADER          : 'алг';
+ALG_BEGIN           : 'нач';
+ALG_END             : 'кон';
+PRE_CONDITION       : 'дано';
+POST_CONDITION      : 'надо';
+ASSERTION           : 'утв';
+LOOP                : 'нц';
+ENDLOOP_COND        : ('кц' WS 'при' | 'кц_при');
+ENDLOOP             : 'кц';
+IF                  : 'если';
+THEN                : 'то';
+ELSE                : 'иначе';
+FI                  : 'все';
+SWITCH              : 'выбор';
+CASE                : 'при';
+INPUT               : 'ввод';
+OUTPUT              : 'вывод';
+ASSIGN              : ':=';
+EXIT                : 'выход';
+PAUSE               : 'пауза';
+STOP                : 'стоп';
+FOR                 : 'для';
+WHILE               : 'пока';
+TIMES               : 'раз';
+FROM                : 'от';
+TO                  : 'до';
+STEP                : 'шаг';
+NEWLINE_CONST       : 'нс';
+NOT                 : 'не';
+AND                 : 'и';
+OR                  : 'или';
+OUT_PARAM           : 'рез';
+IN_PARAM            : 'арг';
+INOUT_PARAM         : ('аргрез' | 'арг' WS 'рез' | 'арг_рез');
+RETURN_VALUE        : 'знач';
+
+INTEGER_TYPE        : 'цел';
+REAL_TYPE           : 'вещ';
+BOOLEAN_TYPE        : 'лог';
+CHAR_TYPE           : 'сим';
+STRING_TYPE         : 'лит';
+TABLE_SUFFIX        : 'таб';
+
+INTEGER_ARRAY_TYPE  : ('цел' WS? 'таб' | 'цел_таб');
+REAL_ARRAY_TYPE     : ('вещ' WS? 'таб' | 'вещ_таб');
+CHAR_ARRAY_TYPE     : ('сим' WS? 'таб' | 'сим_таб');
+STRING_ARRAY_TYPE   : ('лит' WS? 'таб' | 'лит_таб');
+BOOLEAN_ARRAY_TYPE  : ('лог' WS? 'таб' | 'лог_таб');
+
+TRUE                : 'да';
+FALSE               : 'нет';
+
+POWER               : '**';
+GE                  : '>=';
+LE                  : '<=';
+NE                  : '<>';
+PLUS                : '+';
+MINUS               : '-';
+MUL                 : '*';
+DIV                 : '/';
+EQ                  : '=';
+LT                  : '<';
+GT                  : '>';
+LPAREN              : '(';
+RPAREN              : ')';
+LBRACK              : '[';
+RBRACK              : ']';
+LBRACE              : '{';
+RBRACE              : '}';
+COMMA               : ',';
+COLON               : ':';
+SEMICOLON           : ';';
+ATAT                : '@@';
+AT                  : '@';
+DIV_OP              : 'div';
+MOD_OP              : 'mod';
+
+CHAR_LITERAL        : '\'' ( EscapeSequence | ~['\\\r\n] ) '\'' ;
+STRING              : '"' ( EscapeSequence | ~["\\\r\n] )*? '"'
+                    | '\'' ( EscapeSequence | ~['\\\r\n] )*? '\''
+                    ;
+REAL                : (DIGIT+ '.' DIGIT* | '.' DIGIT+) ExpFragment?
+                    | DIGIT+ ExpFragment
+                    ;
+INTEGER             : DecInteger | HexInteger ;
+
+ID                  : LETTER (LETTER | DIGIT | '_' | '@')* ;
+
+LINE_COMMENT        : '|' ~[\r\n]* -> channel(HIDDEN);
+DOC_COMMENT         : '#' ~[\r\n]* -> channel(HIDDEN);
+
+WS                  : [ \t\r\n]+ -> skip;
+
+fragment DIGIT      : [0-9];
+fragment HEX_DIGIT  : [0-9a-fA-F];
+fragment LETTER     : [a-zA-Zа-яА-ЯёЁ];
+fragment DecInteger : DIGIT+;
+fragment HexInteger : '$' HEX_DIGIT+;
+fragment ExpFragment: [eE] [+-]? DIGIT+;
+fragment EscapeSequence
+                    : '\\' [btnfr"'\\]
+                    ;
+\end{lstlisting}
+
+В листинге~\ref{lst:kafka-click2} представлен парсер грамматики в формате ANTRL.
+
+\begin{lstlisting}[language=sql, caption={Парсер грамматики в формате ANTRL}, label=lst:kafka-click2]
+parser grammar KumirParser;
+
+options { tokenVocab=KumirLexer; } 
+
+qualifiedIdentifier
+    : ID 
+    ;
+
+literal
+    : INTEGER | REAL | STRING | CHAR_LITERAL | TRUE | FALSE  | NEWLINE_CONST
+    ;
+
+expressionList
+    : expression (COMMA expression)*
+    ;
+
+arrayLiteral 
+    : LBRACE expressionList? RBRACE
+    ;
+
+primaryExpression
+    : literal
+    | qualifiedIdentifier 
+    | RETURN_VALUE        
+    | LPAREN expression RPAREN 
+    | arrayLiteral
+    ;
+
+argumentList 
+    : expression (COMMA expression)*
+    ;
+
+indexList 
+    : expression (COLON expression)? // Single index or slice
+    | expression COMMA expression    // 2D index
+    ;
+
+postfixExpression
+    : primaryExpression ( LBRACK indexList RBRACK | LPAREN argumentList? RPAREN )*
+    ;
+
+unaryExpression 
+    : (PLUS | MINUS | NOT) unaryExpression | postfixExpression
+    ;
+
+powerExpression
+    : unaryExpression (POWER powerExpression)?
+    ;
+
+multiplicativeExpression 
+    : powerExpression ((MUL | DIV | DIV_OP | MOD_OP) powerExpression)*
+    ;
+
+additiveExpression
+    : multiplicativeExpression ((PLUS | MINUS) multiplicativeExpression)*
+    ;
+
+relationalExpression 
+    : additiveExpression ((LT | GT | LE | GE) additiveExpression)*
+    ;
+
+equalityExpression
+    : relationalExpression ((EQ | NE) relationalExpression)*
+    ;
+
+logicalAndExpression 
+    : equalityExpression (AND equalityExpression)*
+    ;
+
+logicalOrExpression 
+    : logicalAndExpression (OR logicalAndExpression)*
+    ;
+
+expression // Top-level expression rule
+    : logicalOrExpression
+    ;
+
+typeSpecifier 
+    : arrayType              
+    | basicType TABLE_SUFFIX?
+    ;
+
+basicType 
+    : INTEGER_TYPE | REAL_TYPE | BOOLEAN_TYPE | CHAR_TYPE | STRING_TYPE
+    ;
+
+arrayType 
+    : INTEGER_ARRAY_TYPE | REAL_ARRAY_TYPE | BOOLEAN_ARRAY_TYPE | CHAR_ARRAY_TYPE | STRING_ARRAY_TYPE
+    ;
+
+arrayBounds 
+    : expression COLON expression
+    ;
+
+variableDeclarationItem
+    : ID (LBRACK arrayBounds (COMMA arrayBounds)* RBRACK)? ( EQ expression )?
+    ;
+
+variableList
+    : variableDeclarationItem (COMMA variableDeclarationItem)*
+    ;
+
+variableDeclaration
+    : typeSpecifier variableList
+    ;
+
+globalDeclaration
+    : typeSpecifier variableList SEMICOLON?
+    ;
+
+globalAssignment
+    : qualifiedIdentifier ASSIGN (literal | unaryExpression | arrayLiteral) SEMICOLON?
+    ;
+
+parameterDeclaration
+    : (IN_PARAM | OUT_PARAM | INOUT_PARAM)? typeSpecifier variableList
+    ;
 
 
+parameterList
+    : parameterDeclaration (COMMA parameterDeclaration)*
+    ;
+
+
+algorithmNameTokens
+    : ~(LPAREN | ALG_BEGIN | PRE_CONDITION | POST_CONDITION | SEMICOLON | EOF)+
+    ;
+
+algorithmName: ID+ ;
+
+
+algorithmHeader
+    : ALG_HEADER typeSpecifier? algorithmNameTokens (LPAREN parameterList? RPAREN)? SEMICOLON?
+    ;
+
+preCondition
+    : PRE_CONDITION expression SEMICOLON?
+    ;
+
+postCondition
+    : POST_CONDITION expression SEMICOLON?
+    ;
+
+algorithmBody
+    : statementSequence
+    ;
+
+statementSequence
+    : statement*
+    ;
+
+lvalue
+    : qualifiedIdentifier (LBRACK indexList RBRACK)? 
+    | RETURN_VALUE                                  
+    ;
+
+assignmentStatement
+    : lvalue ASSIGN expression
+    | expression
+    ;
+
+ioArgument
+    : expression (COLON expression (COLON expression)?)? // Expression with optional formatting
+    | NEWLINE_CONST 
+    ;
+
+ioArgumentList
+    : ioArgument (COMMA ioArgument)*
+    ;
+
+ioStatement
+    : (INPUT | OUTPUT) ioArgumentList
+    ;
+
+ifStatement
+    : IF expression THEN statementSequence (ELSE statementSequence)? FI
+    ;
+
+caseBlock
+    : CASE expression COLON statementSequence
+    ;
+
+switchStatement
+    : SWITCH caseBlock+ (ELSE statementSequence)? FI
+    ;
+
+endLoopCondition
+    : ENDLOOP_COND expression
+    ;
+
+loopSpecifier
+    : FOR ID FROM expression TO expression (STEP expression)?
+    | WHILE expression
+    | expression TIMES
+    ;
+
+loopStatement
+    : LOOP loopSpecifier? statementSequence (ENDLOOP | endLoopCondition)
+    ;
+
+exitStatement
+    : EXIT
+    ;
+
+pauseStatement
+    : PAUSE
+    ;
+
+stopStatement
+    : STOP
+    ;
+
+assertionStatement
+    : ASSERTION expression
+    ;
+
+procedureCallStatement
+    : qualifiedIdentifier (LPAREN argumentList? RPAREN)?
+    ;
+
+statement
+    : variableDeclaration SEMICOLON?
+    | assignmentStatement SEMICOLON?
+    | ioStatement SEMICOLON?
+    | ifStatement SEMICOLON?
+    | switchStatement SEMICOLON?
+    | loopStatement SEMICOLON?
+    | exitStatement SEMICOLON?
+    | pauseStatement SEMICOLON?
+    | stopStatement SEMICOLON?
+    | assertionStatement SEMICOLON?
+    | SEMICOLON // Allow empty statements
+    ;
+
+
+algorithmDefinition
+    : algorithmHeader (preCondition | postCondition | variableDeclaration)*
+      ALG_BEGIN
+      algorithmBody
+      ALG_END algorithmName? SEMICOLON? 
+    ;
+
+programItem
+    : globalDeclaration
+    | globalAssignment
+    ;
+
+program
+    : programItem* algorithmDefinition+ EOF
+    ;
 \end{lstlisting}
 
 \newpage
