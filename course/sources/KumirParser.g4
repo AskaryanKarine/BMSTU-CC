@@ -56,7 +56,7 @@ postfixExpression // Handles array/string access and function calls after a prim
     ;
 
 unaryExpression // Handles unary plus, minus, not
-    : (PLUS | MINUS | NOT) unaryExpression | postfixExpression
+    : op=(PLUS | MINUS | NOT) unaryExpression | postfixExpression
     ;
 
 powerExpression // Handles exponentiation (**)
@@ -64,19 +64,19 @@ powerExpression // Handles exponentiation (**)
     ;
 
 multiplicativeExpression // Handles *, /, div, mod
-    : powerExpression ((MUL | DIV | DIV_OP | MOD_OP) powerExpression)*
+    : powerExpression (op=(MUL | DIV | DIV_OP | MOD_OP) powerExpression)*
     ;
 
 additiveExpression // Handles +, -
-    : multiplicativeExpression ((PLUS | MINUS) multiplicativeExpression)*
+    : multiplicativeExpression (op=(PLUS | MINUS) multiplicativeExpression)*
     ;
 
 relationalExpression // Handles <, >, <=, >=
-    : additiveExpression ((LT | GT | LE | GE) additiveExpression)*
+    : additiveExpression (op=(LT | GT | LE | GE) additiveExpression)*
     ;
 
 equalityExpression // Handles =, <>
-    : relationalExpression ((EQ | NE) relationalExpression)*
+    : relationalExpression (op=(EQ | NE) relationalExpression)*
     ;
 
 logicalAndExpression // Handles 'и' (AND)
