@@ -131,14 +131,6 @@ func (v *BaseKumirParserVisitor) VisitAlgorithmHeader(ctx *AlgorithmHeaderContex
 	return v.VisitChildren(ctx)
 }
 
-func (v *BaseKumirParserVisitor) VisitPreCondition(ctx *PreConditionContext) interface{} {
-	return v.VisitChildren(ctx)
-}
-
-func (v *BaseKumirParserVisitor) VisitPostCondition(ctx *PostConditionContext) interface{} {
-	return v.VisitChildren(ctx)
-}
-
 func (v *BaseKumirParserVisitor) VisitAlgorithmBody(ctx *AlgorithmBodyContext) interface{} {
 	return v.VisitChildren(ctx)
 }
@@ -195,19 +187,7 @@ func (v *BaseKumirParserVisitor) VisitExitStatement(ctx *ExitStatementContext) i
 	return v.VisitChildren(ctx)
 }
 
-func (v *BaseKumirParserVisitor) VisitPauseStatement(ctx *PauseStatementContext) interface{} {
-	return v.VisitChildren(ctx)
-}
-
 func (v *BaseKumirParserVisitor) VisitStopStatement(ctx *StopStatementContext) interface{} {
-	return v.VisitChildren(ctx)
-}
-
-func (v *BaseKumirParserVisitor) VisitAssertionStatement(ctx *AssertionStatementContext) interface{} {
-	return v.VisitChildren(ctx)
-}
-
-func (v *BaseKumirParserVisitor) VisitProcedureCallStatement(ctx *ProcedureCallStatementContext) interface{} {
 	return v.VisitChildren(ctx)
 }
 

@@ -208,18 +208,6 @@ func (s *BaseKumirParserListener) EnterAlgorithmHeader(ctx *AlgorithmHeaderConte
 // ExitAlgorithmHeader is called when production algorithmHeader is exited.
 func (s *BaseKumirParserListener) ExitAlgorithmHeader(ctx *AlgorithmHeaderContext) {}
 
-// EnterPreCondition is called when production preCondition is entered.
-func (s *BaseKumirParserListener) EnterPreCondition(ctx *PreConditionContext) {}
-
-// ExitPreCondition is called when production preCondition is exited.
-func (s *BaseKumirParserListener) ExitPreCondition(ctx *PreConditionContext) {}
-
-// EnterPostCondition is called when production postCondition is entered.
-func (s *BaseKumirParserListener) EnterPostCondition(ctx *PostConditionContext) {}
-
-// ExitPostCondition is called when production postCondition is exited.
-func (s *BaseKumirParserListener) ExitPostCondition(ctx *PostConditionContext) {}
-
 // EnterAlgorithmBody is called when production algorithmBody is entered.
 func (s *BaseKumirParserListener) EnterAlgorithmBody(ctx *AlgorithmBodyContext) {}
 
@@ -304,29 +292,11 @@ func (s *BaseKumirParserListener) EnterExitStatement(ctx *ExitStatementContext) 
 // ExitExitStatement is called when production exitStatement is exited.
 func (s *BaseKumirParserListener) ExitExitStatement(ctx *ExitStatementContext) {}
 
-// EnterPauseStatement is called when production pauseStatement is entered.
-func (s *BaseKumirParserListener) EnterPauseStatement(ctx *PauseStatementContext) {}
-
-// ExitPauseStatement is called when production pauseStatement is exited.
-func (s *BaseKumirParserListener) ExitPauseStatement(ctx *PauseStatementContext) {}
-
 // EnterStopStatement is called when production stopStatement is entered.
 func (s *BaseKumirParserListener) EnterStopStatement(ctx *StopStatementContext) {}
 
 // ExitStopStatement is called when production stopStatement is exited.
 func (s *BaseKumirParserListener) ExitStopStatement(ctx *StopStatementContext) {}
-
-// EnterAssertionStatement is called when production assertionStatement is entered.
-func (s *BaseKumirParserListener) EnterAssertionStatement(ctx *AssertionStatementContext) {}
-
-// ExitAssertionStatement is called when production assertionStatement is exited.
-func (s *BaseKumirParserListener) ExitAssertionStatement(ctx *AssertionStatementContext) {}
-
-// EnterProcedureCallStatement is called when production procedureCallStatement is entered.
-func (s *BaseKumirParserListener) EnterProcedureCallStatement(ctx *ProcedureCallStatementContext) {}
-
-// ExitProcedureCallStatement is called when production procedureCallStatement is exited.
-func (s *BaseKumirParserListener) ExitProcedureCallStatement(ctx *ProcedureCallStatementContext) {}
 
 // EnterStatement is called when production statement is entered.
 func (s *BaseKumirParserListener) EnterStatement(ctx *StatementContext) {}

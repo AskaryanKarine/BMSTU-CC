@@ -166,7 +166,7 @@ parameterList
  * The `+` ensures at least one token is consumed for the name.
  */
 algorithmNameTokens
-    : ~(LPAREN | ALG_BEGIN | PRE_CONDITION | POST_CONDITION | SEMICOLON | EOF)+
+    : ~(LPAREN | ALG_BEGIN | SEMICOLON | EOF)+
     ;
 
 /**
@@ -188,16 +188,6 @@ algorithmName: ID+ ;
  */
 algorithmHeader
     : ALG_HEADER typeSpecifier? algorithmNameTokens (LPAREN parameterList? RPAREN)? SEMICOLON?
-    ;
-
-// Pre-condition block (дано)
-preCondition
-    : PRE_CONDITION expression SEMICOLON?
-    ;
-
-// Post-condition block (надо)
-postCondition
-    : POST_CONDITION expression SEMICOLON?
     ;
 
 // Algorithm body (sequence of statements)
@@ -236,7 +226,7 @@ ioArgumentList
     ;
 
 ioStatement
-    : (INPUT | OUTPUT) ioArgumentList
+    : (OUTPUT) ioArgumentList
     ;
 
 // If statement (если ... то ... иначе ... все)
@@ -276,26 +266,6 @@ exitStatement
     : EXIT
     ;
 
-// Pause statement (пауза)
-pauseStatement
-    : PAUSE
-    ;
-
-// Stop statement (стоп)
-stopStatement
-    : STOP
-    ;
-
-// Assertion statement (утв)
-assertionStatement
-    : ASSERTION expression
-    ;
-
-// Procedure call statement (can also be handled via expression)
-procedureCallStatement
-    : qualifiedIdentifier (LPAREN argumentList? RPAREN)?
-    ;
-
 // General statement rule
 statement
     : variableDeclaration SEMICOLON?
@@ -305,9 +275,6 @@ statement
     | switchStatement SEMICOLON?
     | loopStatement SEMICOLON?
     | exitStatement SEMICOLON?
-    | pauseStatement SEMICOLON?
-    | stopStatement SEMICOLON?
-    | assertionStatement SEMICOLON?
     | SEMICOLON // Allow empty statements
     ;
 
@@ -315,7 +282,7 @@ statement
  * algorithmDefinition: Defines a complete algorithm structure.
  */
 algorithmDefinition
-    : algorithmHeader (preCondition | postCondition | variableDeclaration)*
+    : algorithmHeader (variableDeclaration)*
       ALG_BEGIN
       algorithmBody
       ALG_END algorithmName? SEMICOLON? // Use stricter 'algorithmName' for check after 'кон'

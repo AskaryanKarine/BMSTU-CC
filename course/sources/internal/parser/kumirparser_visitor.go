@@ -100,12 +100,6 @@ type KumirParserVisitor interface {
 	// Visit a parse tree produced by KumirParser#algorithmHeader.
 	VisitAlgorithmHeader(ctx *AlgorithmHeaderContext) interface{}
 
-	// Visit a parse tree produced by KumirParser#preCondition.
-	VisitPreCondition(ctx *PreConditionContext) interface{}
-
-	// Visit a parse tree produced by KumirParser#postCondition.
-	VisitPostCondition(ctx *PostConditionContext) interface{}
-
 	// Visit a parse tree produced by KumirParser#algorithmBody.
 	VisitAlgorithmBody(ctx *AlgorithmBodyContext) interface{}
 
@@ -148,17 +142,8 @@ type KumirParserVisitor interface {
 	// Visit a parse tree produced by KumirParser#exitStatement.
 	VisitExitStatement(ctx *ExitStatementContext) interface{}
 
-	// Visit a parse tree produced by KumirParser#pauseStatement.
-	VisitPauseStatement(ctx *PauseStatementContext) interface{}
-
 	// Visit a parse tree produced by KumirParser#stopStatement.
 	VisitStopStatement(ctx *StopStatementContext) interface{}
-
-	// Visit a parse tree produced by KumirParser#assertionStatement.
-	VisitAssertionStatement(ctx *AssertionStatementContext) interface{}
-
-	// Visit a parse tree produced by KumirParser#procedureCallStatement.
-	VisitProcedureCallStatement(ctx *ProcedureCallStatementContext) interface{}
 
 	// Visit a parse tree produced by KumirParser#statement.
 	VisitStatement(ctx *StatementContext) interface{}

@@ -21,9 +21,6 @@ options { caseInsensitive = true; }
 ALG_HEADER          : 'алг';
 ALG_BEGIN           : 'нач';
 ALG_END             : 'кон';
-PRE_CONDITION       : 'дано';
-POST_CONDITION      : 'надо';
-ASSERTION           : 'утв';
 LOOP                : 'нц';
 ENDLOOP_COND        : ('кц' WS 'при' | 'кц_при');
 ENDLOOP             : 'кц';
@@ -33,12 +30,9 @@ ELSE                : 'иначе';
 FI                  : 'все';
 SWITCH              : 'выбор';
 CASE                : 'при';
-INPUT               : 'ввод';
 OUTPUT              : 'вывод';
 ASSIGN              : ':=';
 EXIT                : 'выход';
-PAUSE               : 'пауза';
-STOP                : 'стоп';
 FOR                 : 'для';
 WHILE               : 'пока';
 TIMES               : 'раз';
@@ -60,7 +54,6 @@ BOOLEAN_TYPE        : 'лог';
 CHAR_TYPE           : 'сим';
 STRING_TYPE         : 'лит';
 TABLE_SUFFIX        : 'таб';
-
 INTEGER_ARRAY_TYPE  : ('цел' WS? 'таб' | 'цел_таб');
 REAL_ARRAY_TYPE     : ('вещ' WS? 'таб' | 'вещ_таб');
 CHAR_ARRAY_TYPE     : ('сим' WS? 'таб' | 'сим_таб');
@@ -69,7 +62,6 @@ BOOLEAN_ARRAY_TYPE  : ('лог' WS? 'таб' | 'лог_таб');
 
 TRUE                : 'да';
 FALSE               : 'нет';
-
 POWER               : '**';
 GE                  : '>=';
 LE                  : '<=';
@@ -90,8 +82,6 @@ RBRACE              : '}';
 COMMA               : ',';
 COLON               : ':';
 SEMICOLON           : ';';
-ATAT                : '@@';
-AT                  : '@';
 DIV_OP              : 'div';
 MOD_OP              : 'mod';
 
@@ -127,10 +117,11 @@ fragment EscapeSequence
 \begin{lstlisting}[language=sql, caption={Парсер грамматики в формате ANTRL}, label=lst:kafka-click2]
 parser grammar KumirParser;
 
-options { tokenVocab=KumirLexer; } 
+options { tokenVocab=KumirLexer; } // Use tokens from KumirLexer.g4
+
 
 qualifiedIdentifier
-    : ID 
+    : ID // Currently simple ID, can be extended for module.member later
     ;
 
 literal
@@ -141,14 +132,14 @@ expressionList
     : expression (COMMA expression)*
     ;
 
-arrayLiteral 
+arrayLiteral
     : LBRACE expressionList? RBRACE
     ;
 
-primaryExpression
+primaryExpression 
     : literal
-    | qualifiedIdentifier 
-    | RETURN_VALUE        
+    | qualifiedIdentifier
+    | RETURN_VALUE
     | LPAREN expression RPAREN 
     | arrayLiteral
     ;
@@ -157,65 +148,65 @@ argumentList
     : expression (COMMA expression)*
     ;
 
-indexList 
-    : expression (COLON expression)? // Single index or slice
-    | expression COMMA expression    // 2D index
+indexList
+    : expression (COLON expression)? 
+    | expression COMMA expression
     ;
 
 postfixExpression
     : primaryExpression ( LBRACK indexList RBRACK | LPAREN argumentList? RPAREN )*
     ;
 
-unaryExpression 
-    : (PLUS | MINUS | NOT) unaryExpression | postfixExpression
+unaryExpression
+    : op=(PLUS | MINUS | NOT) unaryExpression | postfixExpression
     ;
 
 powerExpression
     : unaryExpression (POWER powerExpression)?
     ;
 
-multiplicativeExpression 
-    : powerExpression ((MUL | DIV | DIV_OP | MOD_OP) powerExpression)*
+multiplicativeExpression
+    : powerExpression (op=(MUL | DIV | DIV_OP | MOD_OP) powerExpression)*
     ;
 
 additiveExpression
-    : multiplicativeExpression ((PLUS | MINUS) multiplicativeExpression)*
+    : multiplicativeExpression (op=(PLUS | MINUS) multiplicativeExpression)*
     ;
 
-relationalExpression 
-    : additiveExpression ((LT | GT | LE | GE) additiveExpression)*
+relationalExpression
+    : additiveExpression (op=(LT | GT | LE | GE) additiveExpression)*
     ;
 
 equalityExpression
-    : relationalExpression ((EQ | NE) relationalExpression)*
+    : relationalExpression (op=(EQ | NE) relationalExpression)*
     ;
 
-logicalAndExpression 
+logicalAndExpression
     : equalityExpression (AND equalityExpression)*
     ;
 
-logicalOrExpression 
+logicalOrExpression
     : logicalAndExpression (OR logicalAndExpression)*
     ;
 
-expression // Top-level expression rule
+expression
     : logicalOrExpression
     ;
 
 typeSpecifier 
-    : arrayType              
+    : arrayType
     | basicType TABLE_SUFFIX?
     ;
 
-basicType 
+basicType
     : INTEGER_TYPE | REAL_TYPE | BOOLEAN_TYPE | CHAR_TYPE | STRING_TYPE
     ;
 
-arrayType 
+arrayType
     : INTEGER_ARRAY_TYPE | REAL_ARRAY_TYPE | BOOLEAN_ARRAY_TYPE | CHAR_ARRAY_TYPE | STRING_ARRAY_TYPE
     ;
 
-arrayBounds 
+arrayBounds
     : expression COLON expression
     ;
 
@@ -239,33 +230,23 @@ globalAssignment
     : qualifiedIdentifier ASSIGN (literal | unaryExpression | arrayLiteral) SEMICOLON?
     ;
 
+
 parameterDeclaration
     : (IN_PARAM | OUT_PARAM | INOUT_PARAM)? typeSpecifier variableList
     ;
-
 
 parameterList
     : parameterDeclaration (COMMA parameterDeclaration)*
     ;
 
-
 algorithmNameTokens
-    : ~(LPAREN | ALG_BEGIN | PRE_CONDITION | POST_CONDITION | SEMICOLON | EOF)+
+    : ~(LPAREN | ALG_BEGIN | SEMICOLON | EOF)+
     ;
 
 algorithmName: ID+ ;
 
-
 algorithmHeader
     : ALG_HEADER typeSpecifier? algorithmNameTokens (LPAREN parameterList? RPAREN)? SEMICOLON?
-    ;
-
-preCondition
-    : PRE_CONDITION expression SEMICOLON?
-    ;
-
-postCondition
-    : POST_CONDITION expression SEMICOLON?
     ;
 
 algorithmBody
@@ -277,8 +258,8 @@ statementSequence
     ;
 
 lvalue
-    : qualifiedIdentifier (LBRACK indexList RBRACK)? 
-    | RETURN_VALUE                                  
+    : qualifiedIdentifier (LBRACK indexList RBRACK)?
+    | RETURN_VALUE
     ;
 
 assignmentStatement
@@ -287,7 +268,7 @@ assignmentStatement
     ;
 
 ioArgument
-    : expression (COLON expression (COLON expression)?)? // Expression with optional formatting
+    : expression (COLON expression (COLON expression)?)?
     | NEWLINE_CONST 
     ;
 
@@ -296,7 +277,7 @@ ioArgumentList
     ;
 
 ioStatement
-    : (INPUT | OUTPUT) ioArgumentList
+    : (OUTPUT) ioArgumentList
     ;
 
 ifStatement
@@ -329,22 +310,6 @@ exitStatement
     : EXIT
     ;
 
-pauseStatement
-    : PAUSE
-    ;
-
-stopStatement
-    : STOP
-    ;
-
-assertionStatement
-    : ASSERTION expression
-    ;
-
-procedureCallStatement
-    : qualifiedIdentifier (LPAREN argumentList? RPAREN)?
-    ;
-
 statement
     : variableDeclaration SEMICOLON?
     | assignmentStatement SEMICOLON?
@@ -353,18 +318,14 @@ statement
     | switchStatement SEMICOLON?
     | loopStatement SEMICOLON?
     | exitStatement SEMICOLON?
-    | pauseStatement SEMICOLON?
-    | stopStatement SEMICOLON?
-    | assertionStatement SEMICOLON?
     | SEMICOLON // Allow empty statements
     ;
 
-
 algorithmDefinition
-    : algorithmHeader (preCondition | postCondition | variableDeclaration)*
+    : algorithmHeader (variableDeclaration)*
       ALG_BEGIN
       algorithmBody
-      ALG_END algorithmName? SEMICOLON? 
+      ALG_END algorithmName? SEMICOLON?
     ;
 
 programItem

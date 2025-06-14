@@ -18,28 +18,175 @@
 
 Был реализован интерфейс BaseVisitor, т.к. он предоставляет контролируемый обход с явным указанием порядка посещения узлов через специализированные методы вида \texttt{VisitXXX}. Пример реализации такого метода представлен в листинге~\ref{lst:visitor-example}.
 
-\begin{lstlisting}[language=go, caption={Пример реализации метода BaseVisitor}, label=lst:visitor-example]
-TODO
+\begin{lstlisting}[language=go, caption={Пример реализации метода VisitBasicType для определения типа скалярной переменной}, label=lst:visitor-example]
+func (v *IRVisitor) VisitBasicType(ctx *parser.BasicTypeContext) interface{} {
+	if ctx.INTEGER_TYPE() != nil {
+		return types.I32
+	} else if ctx.REAL_TYPE() != nil {
+		return types.Double
+	} else if ctx.BOOLEAN_TYPE() != nil {
+		return types.I1
+	} else if ctx.CHAR_TYPE() != nil {
+		return types.I8
+	} else if ctx.STRING_TYPE() != nil {
+		return types.NewPointer(types.I8)
+	}
+	v.Errors = append(v.Errors, fmt.Errorf("unknown basic type: %s", ctx.GetText()))
+	return types.I32
+}
 \end{lstlisting}
 
-% TODO: расписать когда добью реализацию
+\subsubsection*{Порядок функций}
+
+В КуМир нет четкой определенной функции \texttt{main}. В ее роли выступает первая встреченная функция. Функции, определенные за ней будут являться обычными функциями, которые можно будет вызвать из главной. 
+
+Однако, в \texttt{LLVM IR} выполнение должно начинать с функции \texttt{main}. Для этого используется код, представленный в листинге~\ref{lst:main}.
+
+\begin{lstlisting}[language=go, caption={Определение main-функции}, label=lst:main]
+func (v *IRVisitor) declareAlgorithmPrototype(ctx *parser.AlgorithmHeaderContext) {
+    ... 
+	if v.mainOriginalName == "" {
+		v.mainOriginalName = llvmFuncName
+		llvmFuncName = "main"
+	}
+    ...
+}
+\end{lstlisting}
+
+В связи с тем, что объявление используемых функций узнаются позже, чем сгенерируется LLVM-представление происходит ситуация, что мы не знаем о других функциях в программе, а объявлять их раньше нельзя, т.к. они будут считаться главными. Для решения этой проблемы было принято решение делать предварительный обход по всем заголовкам функций и создавать их прототипы. Код обхода представлен в листинге~\ref{lst:declare}
+
+\begin{lstlisting}[language=go, caption={Обход по заголовкам функций}, label=lst:declare]
+func (v *IRVisitor) VisitProgram(ctx *parser.ProgramContext) interface{} {
+    ...
+	for _, item := range ctx.AllAlgorithmDefinition() {
+		v.declareAlgorithmPrototype(item.AlgorithmHeader().
+            (*parser.AlgorithmHeaderContext))
+	}
+	for _, item := range ctx.AllAlgorithmDefinition() {
+		v.Visit(item)
+	}
+    ...
+}
+\end{lstlisting}
+
+\subsubsection*{Кириллические имена функций и переменных}
+
+Синтаксис языка КуМир представлен на русском языке, он позволяет в качестве идентификаторов использовать кириллические имена функций и переменных, но \texttt{LLVM IR} такого не допускает. Поэтому при каждом получении идентификатора он проходит обработку представленную в листинге~\ref{lst:normal}.
+
+\begin{lstlisting}[language=go, caption={Подготовка имени к использованию в дальнейшем коде}, label=lst:normal]
+func containsNonASCII(s string) bool {
+	for _, r := range s {
+		if r > unicode.MaxASCII {
+			return true
+		}
+	}
+	return false
+}
+
+func NormalizeFunctionName(name string) string {
+	transliterated := translit.EncodeToICAO(name)
+	if containsNonASCII(name) {
+		transliterated += "_rus"
+	}
+
+	var sb strings.Builder
+	for i, r := range transliterated {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_' {
+			sb.WriteRune(r)
+		} else if i == 0 && unicode.IsDigit(r) {
+			sb.WriteRune('_')
+			sb.WriteRune(r)
+		} else {
+			sb.WriteRune('_')
+		}
+	}
+	return sb.String()
+}
+\end{lstlisting}
+
+Код, представленный в этом листинге сначала транлитизирует кириллицу в латиницу, а после добавляет суффикс <<\_rus>> для избежания конфликтов в ситуации наименования функций <<Факт>> и <<Fact>>. Если идентификатор изначально был на латинице, то с ним ничего не происходит.
+
 \subsubsection*{Статическая типизация}
 
-TODO
+Язык КуМир строго типизирован так же, однако в нем так же, как и в $C$ есть неявное приведение типов, а точнее расширение с типа \texttt{цел} до типа \texttt{вещ}, что равносильно расширению с \texttt{int} до \texttt{double} в $C$. Для реализации неявного расширения типов была реализована функция, представленная в листинге~\ref{lst:cast}. 
+
+\begin{lstlisting}[language=go, caption={Пример реализации метода VisitBasicType для определения типа скалярной переменной}, label=lst:cast]
+func (v *IRVisitor) castToMatch(lhs, rhs value.Value) (value.Value, value.Value) {
+	lt, rt := lhs.Type(), rhs.Type()
+	if lt.Equal(rt) {
+		return lhs, rhs
+	}
+	if _, ok := lt.(*types.IntType); ok {
+		if _, isFloat := rt.(*types.FloatType); isFloat {
+			lhs = v.currentBlock.NewSIToFP(lhs, rt)
+			return lhs, rhs
+		}
+	}
+	if _, ok := rt.(*types.IntType); ok {
+		if _, isFloat := lt.(*types.FloatType); isFloat {
+			rhs = v.currentBlock.NewSIToFP(rhs, lt)
+			return lhs, rhs
+		}
+	}
+	return lhs, rhs
+}
+\end{lstlisting}
 
 \subsubsection*{Базовые функции языка}
 
-TODO
+Были так же реализованы базовые функции языка, а именно:
+\begin{itemize}
+    \item арифметические операции;
+    \item логические операции;
+    \item операции сравнения;
+    \item условные конструкции;
+    \item циклы;
+    \item досрочный выход из цикла (break);
+    \item функции и процедуры;
+    \item функция вывода в стандартный поток ввода-вывода.
+\end{itemize}
 
 \subsection{Тестирование}
 
 Было проведено тестирование работы компилятора для базовых конструкций КуМир в соответствии с грамматикой. Примеры программ для тестирования представлены в приложении~\ref{appendix:b}.
 
+В эти примеры вошли:
+\begin{itemize}
+    \item выводы различных величин;
+    \item поиск максимума с помощью вложенных условных конструкций;
+    \item 7 видов циклов, в том числе бесконечный и вложенный;
+    \item программа с процедурой;
+    \item программа с оператором выбора (switch);
+    \item программа с выводом различных арифметических операций;
+    \item рекурсивное вычисление факториала.
+\end{itemize}
+
 \subsection{Пример работы программы}
+
+Для запуска работы программы достаточно выполнить одну из команд, представленных в листинге~\ref{lst:start}.
+
+\begin{lstlisting}[language=go, caption={Пример запуска реализованного компилятора}, label=lst:start]
+Если запускать через go:
+go run ./cmd/compiler/main.go -i <путь_до_файла> 
+Если программа скомпилирована в бинарник:
+main -i <путь_до_файла> -o <путь_до_файла> 
+\end{lstlisting}
+
+Кроме того, реализован следующий \texttt{CLI}-интерфейс:
+\begin{itemize}
+    \item флаг \texttt{-i} указывает путь до файла с исходным кодом на языке КуМир, по умолчанию равен <<./example/2+2.kum>>;
+    \item флаг \texttt{-o} указывает на путь скомпилированного исполняемого файла, по умолчанию равен <<./example/out>>;
+    \item флаг \texttt{-d} позволяет сгенерировать AST-дерево для указанного файла с исходным кодом, по умолчанию равен \texttt{False}.
+\end{itemize}
 
 Примеры программ на КуМир и соответствующий им результат работы компилятора на LLVM IR представлены в Приложении~\ref{appendix:c}.
 
-%  нужно ли писать про флаги и вывод в dot формате? - можно описать cli
+К этим примерам относятся:
+\begin{itemize}
+    \item рекурсивное вычисление N-го числа Фибоначчи;
+    \item циклическое вычисление N-го числа Фибоначчи;
+    \item реверс массива.
+\end{itemize}
 
 \newpage
 	

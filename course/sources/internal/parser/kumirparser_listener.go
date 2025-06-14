@@ -100,12 +100,6 @@ type KumirParserListener interface {
 	// EnterAlgorithmHeader is called when entering the algorithmHeader production.
 	EnterAlgorithmHeader(c *AlgorithmHeaderContext)
 
-	// EnterPreCondition is called when entering the preCondition production.
-	EnterPreCondition(c *PreConditionContext)
-
-	// EnterPostCondition is called when entering the postCondition production.
-	EnterPostCondition(c *PostConditionContext)
-
 	// EnterAlgorithmBody is called when entering the algorithmBody production.
 	EnterAlgorithmBody(c *AlgorithmBodyContext)
 
@@ -148,17 +142,8 @@ type KumirParserListener interface {
 	// EnterExitStatement is called when entering the exitStatement production.
 	EnterExitStatement(c *ExitStatementContext)
 
-	// EnterPauseStatement is called when entering the pauseStatement production.
-	EnterPauseStatement(c *PauseStatementContext)
-
 	// EnterStopStatement is called when entering the stopStatement production.
 	EnterStopStatement(c *StopStatementContext)
-
-	// EnterAssertionStatement is called when entering the assertionStatement production.
-	EnterAssertionStatement(c *AssertionStatementContext)
-
-	// EnterProcedureCallStatement is called when entering the procedureCallStatement production.
-	EnterProcedureCallStatement(c *ProcedureCallStatementContext)
 
 	// EnterStatement is called when entering the statement production.
 	EnterStatement(c *StatementContext)
@@ -265,12 +250,6 @@ type KumirParserListener interface {
 	// ExitAlgorithmHeader is called when exiting the algorithmHeader production.
 	ExitAlgorithmHeader(c *AlgorithmHeaderContext)
 
-	// ExitPreCondition is called when exiting the preCondition production.
-	ExitPreCondition(c *PreConditionContext)
-
-	// ExitPostCondition is called when exiting the postCondition production.
-	ExitPostCondition(c *PostConditionContext)
-
 	// ExitAlgorithmBody is called when exiting the algorithmBody production.
 	ExitAlgorithmBody(c *AlgorithmBodyContext)
 
@@ -313,17 +292,8 @@ type KumirParserListener interface {
 	// ExitExitStatement is called when exiting the exitStatement production.
 	ExitExitStatement(c *ExitStatementContext)
 
-	// ExitPauseStatement is called when exiting the pauseStatement production.
-	ExitPauseStatement(c *PauseStatementContext)
-
 	// ExitStopStatement is called when exiting the stopStatement production.
 	ExitStopStatement(c *StopStatementContext)
-
-	// ExitAssertionStatement is called when exiting the assertionStatement production.
-	ExitAssertionStatement(c *AssertionStatementContext)
-
-	// ExitProcedureCallStatement is called when exiting the procedureCallStatement production.
-	ExitProcedureCallStatement(c *ProcedureCallStatementContext)
 
 	// ExitStatement is called when exiting the statement production.
 	ExitStatement(c *StatementContext)
